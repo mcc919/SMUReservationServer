@@ -19,6 +19,7 @@ def create_app():
 
     # Initialize JWT
     JWTManager(app)
+    
     # Connect DB
     db.init_app(app)
 
