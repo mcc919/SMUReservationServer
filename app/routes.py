@@ -4,6 +4,8 @@ from datetime import datetime
 from app.models import User, Room, Reservation
 from app import db
 from sangmyung_univ_auth import auth_detail, auth
+from sqlalchemy import desc
+from pytz import timezone
 
 bp = Blueprint('routes', __name__)
 
@@ -17,6 +19,8 @@ def login():
     password = request.form['password']
 
     print('user_id:', user_id)
+    if not user_id or not password:
+        return jsonify({"error": "Missing userId or password"}), 400
     
     result = auth(user_id, password)
     result = result._asdict()  # AuthResponse를 dictionary 형태로 변환
@@ -47,12 +51,16 @@ def validateToken():
     if current_user is None:
         return jsonify({"message": "Invalid token"}), 401
     
-    return jsonify(logged_in_as=current_user), 200
+    user = User.query.filter_by(user_id=current_user).first()
+    if user is None:
+        return jsonify({"message": "유저 정보가 데이터베이스에 존재하지 않습니다."}), 404
+    
+    return jsonify(user.to_dict()), 200
 
 @bp.route('/register', methods=['POST'])
 def register():
     #data = request.get_data()
-    print(data)
+    #print(data)
 
     user_id = request.form['userId']
     password = request.form['password']
@@ -74,6 +82,7 @@ def register():
 
     try:
         data = result['body']
+        time = datetime.now(timezone('Asia/Seoul')).replace(microsecond=0)
         new_user = User(user_id=user_id,
                         department=data['department'],
                         email=data['email'],
@@ -82,7 +91,8 @@ def register():
                         username_eng=data['name_eng'],
                         username_cha=data['name_chinese'],
                         grade=data['grade'],
-                        enrollment_status=data['enrollment_status'])
+                        enrollment_status=data['enrollment_status'],
+                        created_at=time)
                         
         db.session.add(new_user)
         db.session.commit()
@@ -114,18 +124,24 @@ def create_reservation():
     end_time_str = data.get('endTime')
 
     if not user_id or not room_id or not start_time_str or not end_time_str:
-        return jsonify({"message":"필수 정보 누락"}), 400
+        return jsonify({"message":"필수 정보가 누락되었습니다."}), 400
 
     try:
         start_time = datetime.fromisoformat(start_time_str)
         end_time = datetime.fromisoformat(end_time_str)
-        
+        time = datetime.now(timezone('Asia/Seoul')).replace(microsecond=0)
+
         new_rev = Reservation(user_id=user_id,
                               room_id=room_id,
                               start_time=start_time,
-                              end_time=end_time)
+                              end_time=end_time,
+                              created_at=time)
         db.session.add(new_rev)
         db.session.commit()
+
+        
+        print(time)
+
         return jsonify({"message": "New Reservation created"}), 201
     except Exception as e:
         db.session.rollback()
@@ -143,13 +159,15 @@ def create_reservation():
 @bp.route('/reservations/user/<user_id>', methods=['GET'])
 #@jwt_required()
 def get_reservations_by_user(user_id):
-    reservations = Reservation.query.filter_by(user_id=user_id).all()
+    reservations = Reservation.query.filter_by(user_id=user_id).order_by(desc(Reservation.start_time)).all()
     return jsonify([reservation.to_dict() for reservation in reservations]), 200
 
 
 @bp.route('/reservations/room/<room_id>', methods=['GET'])
 #@jwt_required()
 def get_reservations_by_room(room_id):
+    room_id = int(room_id)
+
     reservations = Reservation.query.filter_by(id=room_id).all()
     return jsonify([reservation.to_dict() for reservation in reservations]), 200
 
@@ -157,17 +175,18 @@ def get_reservations_by_room(room_id):
 @bp.route('/reservations/room/<room_id>/date/<date>')
 #@jwt_required()
 def get_reservations_by_room_and_date(room_id, date):
+
+    room_id = int(room_id)
+
+    reservation_date = datetime.strptime(date, '%Y-%m-%d')
+    print('reservation_date: ',reservation_date)
+
+    start_of_day = reservation_date.replace(hour=0, minute=0, second=0, microsecond=0)
+    end_of_day = reservation_date.replace(hour=23, minute=59, second=59, microsecond=999999)
+    print('start_of_day: ',start_of_day)
+    print('end_of_day: ',end_of_day)
+
     try:
-        room_id = int(room_id)
-
-        reservation_date = datetime.strptime(date, '%Y-%m-%d')
-        print('reservation_date: ',reservation_date)
-
-        start_of_day = reservation_date.replace(hour=0, minute=0, second=0, microsecond=0)
-        end_of_day = reservation_date.replace(hour=23, minute=59, second=59, microsecond=999999)
-        print('start_of_day: ',start_of_day)
-        print('end_of_day: ',end_of_day)
-
         reservations = Reservation.query.filter(
             Reservation.room_id == room_id,
             Reservation.start_time >= start_of_day,
@@ -180,5 +199,4 @@ def get_reservations_by_room_and_date(room_id, date):
         return jsonify([reservation.to_dict() for reservation in reservations]), 200
 
     except ValueError:
-        print('유효한 포멧이 아니거나 예외 발생')   # degub
-        return jsonify({"message": "유효한 날짜 포멧이 아닙니다. (YYYY-MM-DD)"}), 400
+        return jsonify({"message": "데이터베이스 처리 중 오류가 발생하였습니다."}), 500

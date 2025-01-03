@@ -23,8 +23,8 @@ class User(db.Model):
     role = db.Column(dbEnum(UserRole), nullable=False, default=UserRole.USER)
     status = db.Column(dbEnum(UserStatus), nullable=False, default=UserStatus.ACTIVE)
 
-    time = datetime.now(timezone('Asia/Seoul')).replace(microsecond=0)
-    created_at = db.Column(db.DateTime, nullable=False, default=time)
+    #time = datetime.now(timezone('Asia/Seoul')).replace(microsecond=0)
+    created_at = db.Column(db.DateTime, nullable=False)
 
     def __repr__(self):
         return f'<User {self.user_id}>'
@@ -79,8 +79,8 @@ class Reservation(db.Model):
     start_time = db.Column(db.DateTime, nullable=False)
     end_time = db.Column(db.DateTime, nullable=False)
     status = db.Column(dbEnum(ReservationStatus), nullable=False, default=ReservationStatus.RESERVED)
-    time = datetime.now(timezone('Asia/Seoul')).replace(microsecond=0)
-    created_at = db.Column(db.DateTime, nullable=False, default=time)
+    #time = datetime.now(timezone('Asia/Seoul')).replace(microsecond=0)
+    created_at = db.Column(db.DateTime, nullable=False)
 
     # Relation setting
     user = db.relationship('User', backref=db.backref('reservation', lazy=True))
