@@ -94,12 +94,19 @@ class Reservation(db.Model):
         end = self.end_time
         created = self.created_at
 
+        start = start.strftime("%Y-%m-%d-%H-%M-%S")
+        end = end.strftime("%Y-%m-%d-%H-%M-%S")
+        created = created.strftime("%Y-%m-%d-%H-%M-%S")
+
         return {
             'id': self.id,
             'user_id': self.user_id,
             'room_id': self.room_id,
-            'start_time': f'{start.year}-{start.month}-{start.day}-{start.hour}-{start.minute}-{start.second}',
-            'end_time': f'{end.year}-{end.month}-{end.day}-{end.hour}-{end.minute}-{end.second}',
+            'start_time': start,
+            'end_time': end,
+            #'start_time': f'{start.year}-{start.month}-{start.day}-{start.hour}-{start.minute}-{start.second}',
+            #'end_time': f'{end.year}-{end.month}-{end.day}-{end.hour}-{end.minute}-{end.second}',
             'status': self.status.value,
-            'created_at': f'{created.year}-{created.month}-{created.day}-{created.hour}-{created.minute}-{created.second}'
+            'created_at': created
+            #'created_at': f'{created.year}-{created.month}-{created.day}-{created.hour}-{created.minute}-{created.second}'
         }

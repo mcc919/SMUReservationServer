@@ -4,8 +4,9 @@ from datetime import datetime
 from app.models import User, Room, Reservation
 from app import db
 from sangmyung_univ_auth import auth_detail, auth
-from sqlalchemy import desc
+from sqlalchemy import desc, case
 from pytz import timezone
+from app.enums import ReservationStatus
 
 bp = Blueprint('routes', __name__)
 
@@ -109,6 +110,17 @@ def get_rooms():
     rooms = [room.to_dict() for room in rooms]
     return jsonify(rooms), 200
 
+@bp.route('/user/<id>', methods=['GET'])
+@jwt_required()
+def get_user(id):
+    print(id)
+    user = User.query.filter_by(user_id=id).first()
+
+    if user is None:
+        return jsonify({'message': '유저 정보를 찾을 수 없습니다.'}), 404
+    
+    return jsonify(user.to_dict()), 200
+
 
 @bp.route('/reservations', methods=['POST'])
 @jwt_required()
@@ -149,6 +161,27 @@ def create_reservation():
         return jsonify({"message": "Error creating reservation"}), 500
 
 
+@bp.route('/reservations/<int:reservation_id>', methods=['PUT'])
+@jwt_required()
+def delete_reservation(reservation_id):
+    reservation = Reservation.query.filter_by(id=reservation_id).first()
+
+    if reservation is None:
+        return jsonify({"error": "Reservation not found"}), 404
+    
+    print(reservation.status.value)
+    print(ReservationStatus.RESERVED.value)
+    if reservation.status.value != ReservationStatus.RESERVED.value:
+        return jsonify({"error": "Reservation is not in reserved status."}), 400
+
+    try:
+        reservation.status = ReservationStatus.CANCELLED
+        db.session.commit()
+        return jsonify({"message": "Reservation status updated to cancelled successfully"}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+
 
 # @bp.route('/reservations', methods=['GET'])
 # @jwt_required()
@@ -159,7 +192,15 @@ def create_reservation():
 @bp.route('/reservations/user/<user_id>', methods=['GET'])
 #@jwt_required()
 def get_reservations_by_user(user_id):
-    reservations = Reservation.query.filter_by(user_id=user_id).order_by(desc(Reservation.start_time)).all()
+    reservations = Reservation.query.filter_by(user_id=user_id).order_by(
+        case(
+            (Reservation.status == ReservationStatus.RESERVED, 0),
+            else_=1
+        ),
+        desc(Reservation.start_time)
+        ).all()
+    for reservation in reservations:
+        print(reservation.to_dict())
     return jsonify([reservation.to_dict() for reservation in reservations]), 200
 
 
