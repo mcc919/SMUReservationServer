@@ -23,8 +23,8 @@ class User(db.Model):
     role = db.Column(dbEnum(UserRole), nullable=False, default=UserRole.USER)
     status = db.Column(dbEnum(UserStatus), nullable=False, default=UserStatus.ACTIVE)
 
-    time = datetime.now(timezone('Asia/Seoul')).replace(microsecond=0)
-    created_at = db.Column(db.DateTime, nullable=False, default=time)
+    #time = datetime.now(timezone('Asia/Seoul')).replace(microsecond=0)
+    created_at = db.Column(db.DateTime, nullable=False)
 
     def __repr__(self):
         return f'<User {self.user_id}>'
@@ -79,8 +79,8 @@ class Reservation(db.Model):
     start_time = db.Column(db.DateTime, nullable=False)
     end_time = db.Column(db.DateTime, nullable=False)
     status = db.Column(dbEnum(ReservationStatus), nullable=False, default=ReservationStatus.RESERVED)
-    time = datetime.now(timezone('Asia/Seoul')).replace(microsecond=0)
-    created_at = db.Column(db.DateTime, nullable=False, default=time)
+    #time = datetime.now(timezone('Asia/Seoul')).replace(microsecond=0)
+    created_at = db.Column(db.DateTime, nullable=False)
 
     # Relation setting
     user = db.relationship('User', backref=db.backref('reservation', lazy=True))
@@ -94,12 +94,19 @@ class Reservation(db.Model):
         end = self.end_time
         created = self.created_at
 
+        start = start.strftime("%Y-%m-%d-%H-%M-%S")
+        end = end.strftime("%Y-%m-%d-%H-%M-%S")
+        created = created.strftime("%Y-%m-%d-%H-%M-%S")
+
         return {
             'id': self.id,
             'user_id': self.user_id,
             'room_id': self.room_id,
-            'start_time': f'{start.year}-{start.month}-{start.day}-{start.hour}-{start.minute}-{start.second}',
-            'end_time': f'{end.year}-{end.month}-{end.day}-{end.hour}-{end.minute}-{end.second}',
+            'start_time': start,
+            'end_time': end,
+            #'start_time': f'{start.year}-{start.month}-{start.day}-{start.hour}-{start.minute}-{start.second}',
+            #'end_time': f'{end.year}-{end.month}-{end.day}-{end.hour}-{end.minute}-{end.second}',
             'status': self.status.value,
-            'created_at': f'{created.year}-{created.month}-{created.day}-{created.hour}-{created.minute}-{created.second}'
+            'created_at': created
+            #'created_at': f'{created.year}-{created.month}-{created.day}-{created.hour}-{created.minute}-{created.second}'
         }

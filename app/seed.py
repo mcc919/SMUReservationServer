@@ -18,14 +18,14 @@ def seed_data():
 
     db.session.bulk_save_objects(rooms)
 
-    reservations = [
-        Reservation(user_id='202010832', room_id=1, start_time=datetime(2024, 12, 30, 9, 0), end_time=datetime(2024, 12, 30, 11, 0)),
-        Reservation(user_id='202010832', room_id=1, start_time=datetime(2024, 12, 30, 11, 0), end_time=datetime(2024, 12, 30, 12, 0)),
-        Reservation(user_id='202010832', room_id=1, start_time=datetime(2024, 12, 30, 13, 0), end_time=datetime(2024, 12, 30, 14, 30)),
-        Reservation(user_id='202010832', room_id=1, start_time=datetime(2024, 12, 30, 15, 0), end_time=datetime(2024, 12, 30, 16, 0)),
-        Reservation(user_id='202010832', room_id=1, start_time=datetime(2024, 12, 30, 17, 0), end_time=datetime(2024, 12, 30, 20, 30)),
-    ]
-    db.session.bulk_save_objects(reservations)
+    # reservations = [
+    #     Reservation(user_id='202010832', room_id=1, start_time=datetime(2024, 12, 30, 9, 0), end_time=datetime(2024, 12, 30, 11, 0)),
+    #     Reservation(user_id='202010832', room_id=1, start_time=datetime(2024, 12, 30, 11, 0), end_time=datetime(2024, 12, 30, 12, 0)),
+    #     Reservation(user_id='202010832', room_id=1, start_time=datetime(2024, 12, 30, 13, 0), end_time=datetime(2024, 12, 30, 14, 30)),
+    #     Reservation(user_id='202010832', room_id=1, start_time=datetime(2024, 12, 30, 15, 0), end_time=datetime(2024, 12, 30, 16, 0)),
+    #     Reservation(user_id='202010832', room_id=1, start_time=datetime(2024, 12, 30, 17, 0), end_time=datetime(2024, 12, 30, 20, 30)),
+    # ]
+    #db.session.bulk_save_objects(reservations)
 
     db.session.commit()
 
