@@ -231,7 +231,8 @@ def get_reservations_by_room_and_date(room_id, date):
         reservations = Reservation.query.filter(
             Reservation.room_id == room_id,
             Reservation.start_time >= start_of_day,
-            Reservation.start_time <= end_of_day
+            Reservation.start_time <= end_of_day,
+            Reservation.status == ReservationStatus.RESERVED
         ).all()
 
         for reservation in reservations:        # debug
