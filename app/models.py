@@ -70,6 +70,7 @@ class Room(db.Model):
 class Reservation(db.Model):
     __table_args__ = ( 
         db.Index('idx_reservation_start_time', 'start_time'),  # start_time 컬럼에 인덱스 추가 -> 검색 속도 향상
+        db.Index('idx_reservation_end_time', 'status', 'end_time')
     )
 
     id = db.Column(db.Integer, primary_key=True, nullable=False, autoincrement=True)
