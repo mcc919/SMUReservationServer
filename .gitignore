@@ -1,3 +1,6 @@
 .env
 db.xlsx
 Database_Schema.xlsx
+venv/
+*.pyc
+__pycache__/
