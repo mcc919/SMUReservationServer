@@ -9,6 +9,7 @@ from pytz import timezone
 from app.enums import ReservationStatus
 
 bp = Blueprint('routes', __name__)
+RESERVATION_OPEN_HOUR = 22
 
 @bp.route('/')
 def index():
@@ -44,6 +45,11 @@ def login():
                 "user": user.to_dict(),
             }
             return jsonify(result), 200
+
+@bp.route("/reservation_settings", methods=["GET"])
+def get_reservation_settings():
+    return jsonify({"reservation_open_hour": RESERVATION_OPEN_HOUR}), 200
+
 
 @bp.route("/validateToken", methods=["GET"])
 @jwt_required()

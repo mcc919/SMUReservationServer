@@ -1,3 +1,5 @@
+import os
+import sys
 from app import create_app, db
 from app.seed import seed_data
 from app.models import Room
@@ -5,6 +7,10 @@ from datetime import datetime, date, timedelta
 from apscheduler.schedulers.background import BackgroundScheduler
 from app.enums import ReservationStatus
 from app.models import Reservation
+
+relative_path = 'custom_library'
+package_path = os.path.join(os.getcwd(), relative_path)
+sys.path.append(package_path)
 
 app = create_app()
 
@@ -43,7 +49,8 @@ def update_reservation_state():
 
 if __name__ == "__main__":
     initialize_db(app)
-
+    update_reservation_state()
+    
     # 스케줄러 초기화
     scheduler = BackgroundScheduler()
     scheduler.add_job(update_reservation_state, 'cron', minute='0, 15, 30, 45')  # 매 00, 15, 30, 45분에 실행
