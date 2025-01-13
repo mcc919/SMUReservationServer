@@ -7,9 +7,9 @@ from sangmyung_univ_auth import auth_detail, auth
 from sqlalchemy import desc, case
 from pytz import timezone
 from app.enums import ReservationStatus
+from constants.reservation_settings import RESERVATION_OPEN_HOUR
 
 bp = Blueprint('routes', __name__)
-RESERVATION_OPEN_HOUR = 22
 
 @bp.route('/')
 def index():
@@ -196,7 +196,7 @@ def delete_reservation(reservation_id):
 
 
 @bp.route('/reservations/user/<user_id>', methods=['GET'])
-#@jwt_required()
+@jwt_required()
 def get_reservations_by_user(user_id):
     reservations = Reservation.query.filter_by(user_id=user_id).order_by(
         case(
@@ -211,7 +211,7 @@ def get_reservations_by_user(user_id):
 
 
 @bp.route('/reservations/room/<room_id>', methods=['GET'])
-#@jwt_required()
+@jwt_required()
 def get_reservations_by_room(room_id):
     room_id = int(room_id)
 
@@ -220,7 +220,7 @@ def get_reservations_by_room(room_id):
 
 
 @bp.route('/reservations/room/<room_id>/date/<date>')
-#@jwt_required()
+@jwt_required()
 def get_reservations_by_room_and_date(room_id, date):
 
     room_id = int(room_id)
@@ -238,7 +238,7 @@ def get_reservations_by_room_and_date(room_id, date):
             Reservation.room_id == room_id,
             Reservation.start_time >= start_of_day,
             Reservation.start_time <= end_of_day,
-            Reservation.status == ReservationStatus.RESERVED
+            Reservation.status != ReservationStatus.CANCELLED
         ).all()
 
         for reservation in reservations:        # debug

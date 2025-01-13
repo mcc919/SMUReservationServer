@@ -1,7 +1,11 @@
 from app import create_app
 from app.models import db, User  # User는 예제 모델 이름
 from app.seed import seed_data
-import os
+import os, sys
+
+relative_path = 'custom_library'
+package_path = os.path.join(os.getcwd(), relative_path)
+sys.path.append(package_path)
 
 # 애플리케이션 및 DB 설정 로드
 app = create_app()
