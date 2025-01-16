@@ -4,6 +4,7 @@ from sqlalchemy import Enum as dbEnum
 from app.enums import UserRole, UserStatus, RoomStatus, RoomLocation, ReservationStatus
 from datetime import datetime
 from pytz import timezone
+from utils import stringToTime
 
 class User(db.Model):
 
@@ -23,6 +24,9 @@ class User(db.Model):
     role = db.Column(dbEnum(UserRole), nullable=False, default=UserRole.USER)
     status = db.Column(dbEnum(UserStatus), nullable=False, default=UserStatus.ACTIVE)
 
+    # Limit is 6 hours in 1 day.
+    today_reserved_time = db.Column(db.Integer, nullable=False, default='00:00:00')
+
     #time = datetime.now(timezone('Asia/Seoul')).replace(microsecond=0)
     created_at = db.Column(db.DateTime, nullable=False)
 
@@ -31,6 +35,8 @@ class User(db.Model):
     
     def to_dict(self):
         date = self.created_at
+        _today_reserved_time = stringToTime(self.today_reserved_time)
+        minutes = _today_reserved_time.hour * 60 + _today_reserved_time.minute
         return {
             'user_id': self.user_id,
             'department': self.department,
@@ -43,6 +49,7 @@ class User(db.Model):
             'enrollment_status': self.enrollment_status,
             'role': self.role.value,
             'status': self.status.value,
+            'today_reserved_time': minutes,
             'created_at': f'{date.year}-{date.month}-{date.day}-{date.hour}-{date.minute}-{date.second}'
         }
 

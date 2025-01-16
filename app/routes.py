@@ -1,13 +1,14 @@
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import create_access_token, get_jwt_identity, jwt_required
-from datetime import datetime
-from app.models import User, Room, Reservation
+from datetime import datetime, date, time
+from app.models import User, Room, Reservation, UserStatus
 from app import db
 from sangmyung_univ_auth import auth_detail, auth
-from sqlalchemy import desc, case
+from sqlalchemy import desc, case, or_, and_
 from pytz import timezone
 from app.enums import ReservationStatus
-from constants.reservation_settings import RESERVATION_OPEN_HOUR
+from constants.reservation_settings import RESERVATION_OPEN_HOUR, RESERVATION_LIMIT_PER_DAY, RESERVATION_LIMIT_PER_ROOM
+from utils import stringToDatetime, stringToTime
 
 bp = Blueprint('routes', __name__)
 
@@ -89,7 +90,7 @@ def register():
 
     try:
         data = result['body']
-        time = datetime.now(timezone('Asia/Seoul')).replace(microsecond=0)
+        created_at = datetime.now(timezone('Asia/Seoul')).replace(microsecond=0)
         new_user = User(user_id=user_id,
                         department=data['department'],
                         email=data['email'],
@@ -99,7 +100,7 @@ def register():
                         username_cha=data['name_chinese'],
                         grade=data['grade'],
                         enrollment_status=data['enrollment_status'],
-                        created_at=time)
+                        created_at=created_at)
                         
         db.session.add(new_user)
         db.session.commit()
@@ -136,35 +137,144 @@ def create_reservation():
 
     data = request.get_json()  # JSON 데이터 받기
 
-    user_id = data.get('userId')
-    room_id = data.get('roomId')
-    start_time_str = data.get('startTime')
-    end_time_str = data.get('endTime')
+    input_user_id = data.get('userId')
+    input_room_id = data.get('roomId')
+    input_start_time_str = data.get('startTime')
+    input_end_time_str = data.get('endTime')
+    input_date = data.get('date')
 
-    if not user_id or not room_id or not start_time_str or not end_time_str:
+    if not input_user_id or not input_room_id or not input_start_time_str or not input_end_time_str or not input_date:
         return jsonify({"message":"필수 정보가 누락되었습니다."}), 400
 
     try:
-        start_time = datetime.fromisoformat(start_time_str)
-        end_time = datetime.fromisoformat(end_time_str)
-        time = datetime.now(timezone('Asia/Seoul')).replace(microsecond=0)
+        user = User.query.filter_by(user_id=input_user_id).first()
+        if user is None:
+            return jsonify({"message": "접근 권한이 없습니다. 회원가입 후 이용해주세요."}), 403 # Forbidden
+        
+        if user.status == UserStatus.INACTIVE:
+            return jsonify({"message": "계정이 아직 승인되지 않았습니다. 관리자에게 문의하세요."}), 403
+        
+        if user.status == UserStatus.BANNED:
+            return jsonify({f"message": "연습실 사용이 금지된 계정입니다. 금지 해제 날짜는 {}입니다."}), 409 # Conflict
+        
+        if user.enrollment_status != '재학':
+            print(user.enrollment_status)
+            return jsonify({"message": "재학 중인 학생만 이용할 수 있습니다."}), 422    # Unprocessable Content
 
-        new_rev = Reservation(user_id=user_id,
-                              room_id=room_id,
+        reservation_date = datetime.strptime(input_date, '%Y-%m-%d')
+        start_of_day = reservation_date.replace(hour=0, minute=0, second=0, microsecond=0)
+        end_of_day = reservation_date.replace(hour=23, minute=59, second=59, microsecond=999999)
+
+        start_time = datetime.fromisoformat(input_start_time_str)
+        end_time = datetime.fromisoformat(input_end_time_str)
+
+    # 유저가 하루 예약 가능 시간을 초과했는지 검사합니다.
+        print('현재 예약 토탈: ', user.today_reserved_time)
+        _today_reserved_time = stringToTime(user.today_reserved_time)   # time 객체로 변경
+
+        _diff = end_time - start_time   # timedelta
+        new_today_reserved_time = (datetime.combine(date.today(), _today_reserved_time) + _diff).time()
+
+        if (RESERVATION_LIMIT_PER_DAY * 60 < new_today_reserved_time.hour * 60 + new_today_reserved_time.minute):
+            return jsonify({"message":
+f'''하루 최대 예약 가능 시간을 초과하였습니다.
+(현재까지 사용된 시간: {user.today_reserved_time})'''}), 409
+    
+    # 유저가 같은 시간에 다른 방에 예약한 내역이 있는지 확인합니다. (중복 예약 방지)
+        reservation = Reservation.query.\
+            filter(
+                Reservation.start_time >= start_of_day,
+                Reservation.start_time <= end_of_day,
+                Reservation.user_id == input_user_id,
+                Reservation.status != ReservationStatus.CANCELLED).\
+            filter(
+                or_(
+                    and_(Reservation.start_time < end_time, Reservation.end_time > start_time),
+                    and_(Reservation.end_time > start_time, Reservation.start_time < end_time)
+                )).first()
+        if reservation:
+            _info = reservation.to_dict()
+            _room_id = _info['room_id']
+            print(_info)
+            room = Room.query.filter_by(id=_room_id).first()
+            
+            if room is None:
+                return jsonify({"message": "서버에서 오류가 발생하였습니다."}), 500
+            
+            room = room.to_dict()
+            _start_time = stringToDatetime(_info['start_time'])
+            _end_time = stringToDatetime(_info['end_time'])
+            print(_info['start_time'])
+            return jsonify({
+                "message":
+f'''같은 시간에 중복된 예약이 존재합니다.
+취소 후에 다시 시도해주세요.\n
+중복된 예약:
+{room['number']}
+{_start_time.strftime('%Y년 %m월 %d일')}
+{_start_time.strftime('%H:%M:%S')}-{_end_time.strftime('%H:%M:%S')}
+''',
+                }), 409
+
+    # 해당 시간의 다른 유저가 예약했는지 확인합니다.
+    # 클라이언트 단에서 예약된 시간은 선택할 수 없도록 해 놓았지만 서버에서 한번 더 확인합니다.
+        reservations = Reservation.query.\
+            filter(
+                Reservation.start_time >= start_of_day,
+                Reservation.start_time <= end_of_day,
+                Reservation.room_id == input_room_id,
+                Reservation.status == ReservationStatus.RESERVED).\
+            filter(
+                or_(
+                    and_(Reservation.start_time < end_time, Reservation.end_time > start_time),
+                    and_(Reservation.end_time > start_time, Reservation.start_time < end_time)
+                )).all()
+
+        if (reservations):
+            return jsonify({"message":"이미 예약된 시간대입니다."}), 409
+
+    # 해당 연습실의 최대 연습 시간을 넘기지 않았는지 확인합니다.
+        reservations = Reservation.query.\
+            filter(
+                Reservation.start_time >= start_of_day,
+                Reservation.start_time <= end_of_day,
+                Reservation.room_id == input_room_id,
+                Reservation.user_id == input_user_id,
+                Reservation.status == ReservationStatus.RESERVED).all()
+        reserved_time = time(0, 0, 0)
+        
+        for reservation in reservations:
+            _reservation = reservation.to_dict()
+            _start_time = stringToDatetime(_reservation['start_time'])
+            _end_time = stringToDatetime(_reservation['end_time'])
+            _diff = _end_time - _start_time
+            reserved_time = (datetime.combine(date.today(), reserved_time) + _diff).time()
+        
+        total_reserved_time = (datetime.combine(date.today(), reserved_time) + (end_time - start_time)).time()
+        if (total_reserved_time > time(3, 0, 0)):
+            return jsonify({'message':
+f'''한 방에 최대 3시간까지만 예약할 수 있습니다.
+현재 이 방에 예약된 시간: {str(reserved_time)}'''}), 409
+
+
+    # 모든 것에 문제가 없으면 예약을 생성합니다.
+        created_at = datetime.now(timezone('Asia/Seoul')).replace(microsecond=0)
+
+        new_rev = Reservation(user_id=input_user_id,
+                              room_id=input_room_id,
                               start_time=start_time,
                               end_time=end_time,
-                              created_at=time)
+                              created_at=created_at)
         db.session.add(new_rev)
+
+        user.today_reserved_time = str(new_today_reserved_time)
+
         db.session.commit()
-
-        
-        print(time)
-
-        return jsonify({"message": "New Reservation created"}), 201
+        return jsonify({"message": "성공적으로 예약되었습니다."}), 201
     except Exception as e:
         db.session.rollback()
         print(e)
-        return jsonify({"message": "Error creating reservation"}), 500
+        return jsonify({"message": "예약 처리 중 서버 오류가 발생하였습니다."}), 500
 
 
 @bp.route('/reservations/<int:reservation_id>', methods=['PUT'])
@@ -173,20 +283,32 @@ def delete_reservation(reservation_id):
     reservation = Reservation.query.filter_by(id=reservation_id).first()
 
     if reservation is None:
-        return jsonify({"error": "Reservation not found"}), 404
+        return jsonify({"message": "예약 내역을 찾을 수 없습니다."}), 404
     
-    print(reservation.status.value)
-    print(ReservationStatus.RESERVED.value)
     if reservation.status.value != ReservationStatus.RESERVED.value:
-        return jsonify({"error": "Reservation is not in reserved status."}), 400
+        return jsonify({"message": "해당 레코드는 예약 상태가 아닙니다."}), 400
 
     try:
         reservation.status = ReservationStatus.CANCELLED
+
+        # 유저의 하루 예약 가능 시간을 다시 늘려줘야 합니다.
+        _reservation = reservation.to_dict()
+        user = User.query.filter_by(user_id=_reservation['user_id']).first()
+        _today_reserved_time = stringToTime(user.today_reserved_time)
+
+        start_time = stringToDatetime(_reservation['start_time'])
+        end_time = stringToDatetime(_reservation['end_time'])
+
+        _diff = end_time - start_time   # timedelta
+
+        new_today_reserved_time = str((datetime.combine(date.today(), _today_reserved_time) - _diff).time())
+        user.today_reserved_time = new_today_reserved_time
+
         db.session.commit()
-        return jsonify({"message": "Reservation status updated to cancelled successfully"}), 200
+        return jsonify({"message": "취소되었습니다."}), 200
     except Exception as e:
         db.session.rollback()
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"message": str(e)}), 500
 
 
 # @bp.route('/reservations', methods=['GET'])
