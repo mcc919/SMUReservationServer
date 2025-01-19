@@ -1,10 +1,10 @@
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import create_access_token, get_jwt_identity, jwt_required
-from datetime import datetime, date, time
+from datetime import datetime, date, time, timedelta
 from app.models import User, Room, Reservation, UserStatus
 from app import db
 from sangmyung_univ_auth import auth_detail, auth
-from sqlalchemy import desc, case, or_, and_
+from sqlalchemy import desc, case, or_, and_, asc
 from pytz import timezone
 from app.enums import ReservationStatus
 from constants.reservation_settings import RESERVATION_OPEN_HOUR, RESERVATION_LIMIT_PER_DAY, RESERVATION_LIMIT_PER_ROOM
@@ -169,16 +169,37 @@ def create_reservation():
         end_time = datetime.fromisoformat(input_end_time_str)
 
     # 유저가 하루 예약 가능 시간을 초과했는지 검사합니다.
+    # 18시 이후의 건은 하루 예약 가능 시간에 포함되지 않습니다.
         print('현재 예약 토탈: ', user.today_reserved_time)
         _today_reserved_time = stringToTime(user.today_reserved_time)   # time 객체로 변경
+        _time_to_reserve_before18 = timedelta(hours=0, minutes=0, seconds=0)
+        _time_to_reserve_after18 = timedelta(hours=0, minutes=0, seconds=0)
 
-        _diff = end_time - start_time   # timedelta
-        new_today_reserved_time = (datetime.combine(date.today(), _today_reserved_time) + _diff).time()
+        if (end_time.time() <= time(18, 0, 0)):
+            print('case1')
+            _time_to_reserve_before18 = end_time - start_time   # timedelta
+            #_diff = end_time - start_time   # timedelta
 
-        if (RESERVATION_LIMIT_PER_DAY * 60 < new_today_reserved_time.hour * 60 + new_today_reserved_time.minute):
+        elif (start_time.time() < time(18, 0, 0) and time(18, 0, 0) < end_time.time()):
+            print('case2')
+            _time_to_reserve_before18 = datetime.combine(date.today(), time(18, 0, 0)) - datetime.combine(date.today(), start_time.time())  # timedelta
+            _time_to_reserve_after18 = datetime.combine(date.today(), end_time.time()) - datetime.combine(date.today(), time(18, 0, 0))
+            #_diff = datetime.combine(date.today(), time(18, 0, 0)) - datetime.combine(date.today(), start_time.time())  # timedelta
+        elif (time(18, 0, 0) <= start_time.time()):
+            print('case3')
+            _time_to_reserve_after18 = end_time - start_time    # timedelta
+            #_diff = timedelta(hours=0, minutes=0, seconds=0)
+            pass
+        else:
+            return jsonify({"message": "예약 조건 확인 중 1번 오류 발생"}), 404
+
+        #new_today_reserved_time = (datetime.combine(date.today(), _today_reserved_time) + _diff).time()
+        new_today_reserved_time = (datetime.combine(date.today(), _today_reserved_time) + _time_to_reserve_before18).time()
+        if (start_time.time() < time(18, 0, 0) and RESERVATION_LIMIT_PER_DAY * 60 < new_today_reserved_time.hour * 60 + new_today_reserved_time.minute):
             return jsonify({"message":
 f'''하루 최대 예약 가능 시간을 초과하였습니다.
-(현재까지 사용된 시간: {user.today_reserved_time})'''}), 409
+(현재까지 사용된 시간: {user.today_reserved_time})
+(추가로 예약하려는 시간: {str(_time_to_reserve_before18)})'''}), 409
     
     # 유저가 같은 시간에 다른 방에 예약한 내역이 있는지 확인합니다. (중복 예약 방지)
         reservation = Reservation.query.\
@@ -234,6 +255,7 @@ f'''같은 시간에 중복된 예약이 존재합니다.
             return jsonify({"message":"이미 예약된 시간대입니다."}), 409
 
     # 해당 연습실의 최대 연습 시간을 넘기지 않았는지 확인합니다.
+    # 18시 이전 예약의 경우 3시간, 18시를 포함하는 경우 4시간까지 허용됩니다.
         reservations = Reservation.query.\
             filter(
                 Reservation.start_time >= start_of_day,
@@ -241,20 +263,54 @@ f'''같은 시간에 중복된 예약이 존재합니다.
                 Reservation.room_id == input_room_id,
                 Reservation.user_id == input_user_id,
                 Reservation.status == ReservationStatus.RESERVED).all()
-        reserved_time = time(0, 0, 0)
-        
+        #_reserved_time = time(0, 0, 0)
+        _total_reserved_time_after18 = timedelta(hours=0, minutes=0, seconds=0)
+        _total_reserved_time_before18 = timedelta(hours=0, minutes=0, seconds=0)
+
         for reservation in reservations:
             _reservation = reservation.to_dict()
             _start_time = stringToDatetime(_reservation['start_time'])
             _end_time = stringToDatetime(_reservation['end_time'])
-            _diff = _end_time - _start_time
-            reserved_time = (datetime.combine(date.today(), reserved_time) + _diff).time()
-        
-        total_reserved_time = (datetime.combine(date.today(), reserved_time) + (end_time - start_time)).time()
-        if (total_reserved_time > time(3, 0, 0)):
+            _reserved_time_after18 = timedelta(hours=0, minutes=0, seconds=0)
+            _reserved_time_before18 = timedelta(hours=0, minutes=0, seconds=0)
+
+            print('_start_time:', _start_time.time())
+            print('_end_time:', _end_time.time())
+            if (_end_time.time() <= time(18, 0, 0)):
+                _reserved_time_before18 = _end_time - _start_time   # timedelta
+            elif (_start_time.time() < time(18, 0, 0) and time(18, 0, 0) < _end_time.time()):
+                _reserved_time_before18 = datetime.combine(date.today(), time(18, 0, 0)) - datetime.combine(date.today(), _start_time.time())  # timedelta
+                _reserved_time_after18 = datetime.combine(date.today(), _end_time.time()) - datetime.combine(date.today(), time(18, 0, 0))
+            elif (time(18, 0, 0) <= _start_time.time()):
+                _reserved_time_after18 = end_time - start_time    # timedelta
+                pass
+            else:
+                return jsonify({"message": "예약 조건 확인 중 2번 오류 발생"}), 404
+            
+            _total_reserved_time_before18 += _reserved_time_before18
+            _total_reserved_time_after18 += _reserved_time_after18
+            print('현재 _before18:', _total_reserved_time_before18)
+            print('현재 _after18:', _total_reserved_time_after18)
+            #_diff = _end_time - _start_time
+            #_reserved_time = (datetime.combine(date.today(), _reserved_time) + _diff).time()
+
+        total_reserved_time_before18 = _total_reserved_time_before18 + _time_to_reserve_before18
+        total_reserved_time_after18 = _total_reserved_time_after18 + _time_to_reserve_after18
+        total_reserved_time = total_reserved_time_before18 + total_reserved_time_after18
+        print('이 방 18시 이전 총합:', str(total_reserved_time_before18))
+        print('이 방 18시 이후 총합:', str(total_reserved_time_after18))
+        print('이 방 총 합', str(total_reserved_time))
+        if (total_reserved_time_before18 > timedelta(hours=3, minutes=0, seconds=0)):
             return jsonify({'message':
-f'''한 방에 최대 3시간까지만 예약할 수 있습니다.
-현재 이 방에 예약된 시간: {str(reserved_time)}'''}), 409
+f'''18시 이전 예약의 경우, 한 방에 최대 3시간까지만 예약할 수 있습니다.
+현재 이 방에 예약된 시간: {str(total_reserved_time_before18 - _time_to_reserve_before18)}'''}), 409
+
+        #total_reserved_time = (datetime.combine(date.today(), _reserved_time) + (end_time - start_time)).time()
+        if (total_reserved_time > timedelta(hours=4, minutes=0, seconds=0)):
+            return jsonify({'message':
+f'''18시 이후를 포함하는 경우, 한 방에 최대 4시간까지 예약할 수 있습니다.
+현재 이 방에 예약된 시간: {str(total_reserved_time - (_time_to_reserve_before18 + _time_to_reserve_after18))}'''}), 409
+            
 
 
     # 모든 것에 문제가 없으면 예약을 생성합니다.
@@ -299,13 +355,23 @@ def delete_reservation(reservation_id):
         start_time = stringToDatetime(_reservation['start_time'])
         end_time = stringToDatetime(_reservation['end_time'])
 
-        _diff = end_time - start_time   # timedelta
+        if (end_time.time() <= time(18, 0, 0)):
+            _diff = end_time - start_time   # timedelta
+        elif (start_time.time() < time(18, 0, 0) and time(18, 0, 0) < end_time.time()):
+            _diff = datetime.combine(date.today(), time(18, 0, 0)) - datetime.combine(date.today(), start_time.time())  # timedelta
+        elif (time(18, 0, 0) <= start_time.time()):
+            _diff = timedelta(hours=0, minutes=0, seconds=0)
+        else:
+            return jsonify({"message": "예약 취소 중 오류가 발생하였습니다."}), 404
 
         new_today_reserved_time = str((datetime.combine(date.today(), _today_reserved_time) - _diff).time())
         user.today_reserved_time = new_today_reserved_time
 
         db.session.commit()
-        return jsonify({"message": "취소되었습니다."}), 200
+        return jsonify({"message":
+f'''취소되었습니다.
+오늘 18시 이전 사용 시간: {user.today_reserved_time}
+(18시 이후는 사용 시간 제한 없음)'''}), 200
     except Exception as e:
         db.session.rollback()
         return jsonify({"message": str(e)}), 500
@@ -325,7 +391,7 @@ def get_reservations_by_user(user_id):
             (Reservation.status == ReservationStatus.RESERVED, 0),
             else_=1
         ),
-        desc(Reservation.start_time)
+        asc(Reservation.start_time)
         ).all()
     for reservation in reservations:
         print(reservation.to_dict())
