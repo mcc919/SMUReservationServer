@@ -25,5 +25,16 @@ class ReservationStatus(Enum):
     COMPLETED = 'completed'     # 완료됨
 
 class BoardStatus(Enum):
+    SUBMITTED = 'submitted'         # 제출됨
+    
+    UNDER_REVIEW = 'under_review'   # 검토중
+    REJECTED = 'rejected'           # 거절됨
+    NEED_REVISION = 'need_revision' # 보완필요
+
+    APPROVED = 'approved'           # 승인됨
     IN_PROGRESS = 'in_progress'     # 처리중
+
+    COMPLETED = 'completed'         # 완료됨
+    CANCELLED = 'cancelled'         # 취소됨
+    HOLD_ON = 'hold_on'             # 보류중
     
