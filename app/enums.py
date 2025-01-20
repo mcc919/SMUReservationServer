@@ -22,5 +22,8 @@ class RoomLocation(Enum):
 class ReservationStatus(Enum):
     RESERVED = 'reserved'       # 예약됨
     CANCELLED = 'cancelled'     # 취소됨
-    IN_PROGRESS = 'in_progress' # 처리 중
     COMPLETED = 'completed'     # 완료됨
+
+class BoardStatus(Enum):
+    IN_PROGRESS = 'in_progress'     # 처리중
+    
