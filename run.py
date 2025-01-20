@@ -51,7 +51,7 @@ def reset_today_reserved_time():
         users = User.query.all()
 
         for user in users:
-            user.today_reserved_time = 0
+            user.today_reserved_time = '00:00:00'
         
         db.session.commit()
         print("유저 하루 예약 시간 초기화 완료")
@@ -59,7 +59,7 @@ def reset_today_reserved_time():
 if __name__ == "__main__":
     initialize_db(app)
     update_reservation_state()
-    
+
     # 스케줄러 초기화
     scheduler = BackgroundScheduler()
     scheduler.add_job(update_reservation_state, 'cron', minute='0, 15, 30, 45')  # 매 00, 15, 30, 45분에 실행

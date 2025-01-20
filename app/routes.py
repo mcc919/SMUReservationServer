@@ -1,12 +1,12 @@
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import create_access_token, get_jwt_identity, jwt_required
 from datetime import datetime, date, time, timedelta
-from app.models import User, Room, Reservation, UserStatus
+from app.models import User, Room, Reservation, Board, BoardComment
+from app.enums import ReservationStatus, UserStatus, BoardStatus
 from app import db
 from sangmyung_univ_auth import auth_detail, auth
 from sqlalchemy import desc, case, or_, and_, asc
 from pytz import timezone
-from app.enums import ReservationStatus
 from constants.reservation_settings import RESERVATION_OPEN_HOUR, RESERVATION_LIMIT_PER_DAY, RESERVATION_LIMIT_PER_ROOM
 from utils import stringToDatetime, stringToTime
 
@@ -436,3 +436,30 @@ def get_reservations_by_room_and_date(room_id, date):
 
     except ValueError:
         return jsonify({"message": "데이터베이스 처리 중 오류가 발생하였습니다."}), 500
+
+
+@bp.route('/boards', methods=['GET'])
+@jwt_required()
+def get_boards():
+    try:
+        boards = Board.query.all()
+        return jsonify([board.to_dict() for board in boards]), 200
+    except Exception as e:
+        return jsonify({"message":e}), 404
+    
+
+@bp.route('/boards', methods=['POST'])
+@jwt_required()
+def submit_board():
+    if not request.is_json:
+        return jsonify({"message": "올바른 JSON 형식이 아닙니다."}), 400
+
+    data = request.get_json()  # JSON 데이터 받기
+
+    input_user_id = data.get('userId')
+    input_room_id = data.get('roomId')
+
+    if not input_user_id or not input_room_id:
+        return jsonify({"message":"필수 정보가 누락되었습니다."}), 400
+    
+    return jsonify({"message": "성공적으로 제출되었습니다."}), 201

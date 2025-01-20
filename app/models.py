@@ -121,14 +121,14 @@ class Reservation(db.Model):
     
 class Board(db.Model):
     __table_args__ = ( 
-        db.Index('idx_created_at', 'created_at')
+        db.Index('idx_board_created_at', 'created_at'),
     )
 
     id = db.Column(db.Integer, primary_key=True, nullable=False, autoincrement=True)
     user_id = db.Column(db.String(20), db.ForeignKey('user.user_id'), nullable=False)
     room_id = db.Column(db.Integer, db.ForeignKey('room.id'), nullable=False)
 
-    title = db.Column(db.String(30, nullable=False))
+    title = db.Column(db.String(30), nullable=False)
     comment = db.Column(db.String(300), nullable=False)
     state = db.Column(dbEnum(BoardStatus), nullable=False, default=BoardStatus.SUBMITTED)
 
@@ -137,9 +137,9 @@ class Board(db.Model):
     
 
 class BoardComment(db.Model):
-    __table_args__ = ( 
-        db.Index('idx_created_at', 'created_at')
-    )
+    # __table_args__ = ( 
+    #     db.Index('idx_created_at', 'created_at'),
+    # )
     
     id = db.Column(db.Integer, primary_key=True, nullable=False, autoincrement=True)
     board_id = db.Column(db.Integer, db.ForeignKey('board.id'), nullable=False, autoincrement=True)
