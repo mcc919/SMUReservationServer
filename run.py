@@ -2,7 +2,7 @@ import os
 import sys
 from app import create_app, db
 from app.seed import seed_data
-from app.models import Room
+from app.models import User, Room
 from datetime import datetime, date, timedelta
 from apscheduler.schedulers.background import BackgroundScheduler
 from app.enums import ReservationStatus
@@ -46,6 +46,15 @@ def update_reservation_state():
         db.session.commit()
         print(f"[{now}] 완료된 예약 상태 업데이트 완료!")
 
+def reset_today_reserved_time():
+    with app.app_context():
+        users = User.query.all()
+
+        for user in users:
+            user.today_reserved_time = 0
+        
+        db.session.commit()
+        print("유저 하루 예약 시간 초기화 완료")
 
 if __name__ == "__main__":
     initialize_db(app)
@@ -54,6 +63,7 @@ if __name__ == "__main__":
     # 스케줄러 초기화
     scheduler = BackgroundScheduler()
     scheduler.add_job(update_reservation_state, 'cron', minute='0, 15, 30, 45')  # 매 00, 15, 30, 45분에 실행
+    scheduler.add_job(reset_today_reserved_time, 'cron', hour='22')
     scheduler.start()
 
     print("스케줄러 시작!")
