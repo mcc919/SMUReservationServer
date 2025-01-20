@@ -1,7 +1,7 @@
 # app/models.py
 from app import db  # app/__init__.py에서 선언한 db 객체 가져오기
 from sqlalchemy import Enum as dbEnum
-from app.enums import UserRole, UserStatus, RoomStatus, RoomLocation, ReservationStatus
+from app.enums import UserRole, UserStatus, RoomStatus, RoomLocation, ReservationStatus, BoardStatus
 from datetime import datetime
 from pytz import timezone
 from utils import stringToTime
@@ -118,3 +118,36 @@ class Reservation(db.Model):
             'created_at': created
             #'created_at': f'{created.year}-{created.month}-{created.day}-{created.hour}-{created.minute}-{created.second}'
         }
+    
+class Board(db.Model):
+    __table_args__ = ( 
+        db.Index('idx_created_at', 'created_at')
+    )
+
+    id = db.Column(db.Integer, primary_key=True, nullable=False, autoincrement=True)
+    user_id = db.Column(db.String(20), db.ForeignKey('user.user_id'), nullable=False)
+    room_id = db.Column(db.Integer, db.ForeignKey('room.id'), nullable=False)
+
+    title = db.Column(db.String(30, nullable=False))
+    comment = db.Column(db.String(300), nullable=False)
+    state = db.Column(dbEnum(BoardStatus), nullable=False, default=BoardStatus.SUBMITTED)
+
+    created_at = db.Column(db.DateTime, nullable=False)
+    edited_at = db.Column(db.DateTime, nullable=False)
+    
+
+class BoardComment(db.Model):
+    __table_args__ = ( 
+        db.Index('idx_created_at', 'created_at')
+    )
+    
+    id = db.Column(db.Integer, primary_key=True, nullable=False, autoincrement=True)
+    board_id = db.Column(db.Integer, db.ForeignKey('board.id'), nullable=False, autoincrement=True)
+    admin_id = db.Column(db.String(20), db.ForeignKey('user.user_id'), nullable=False)
+    room_id = db.Column(db.Integer, db.ForeignKey('room.id'), nullable=False)
+
+    state = db.Column(dbEnum(BoardStatus), nullable=False, default=BoardStatus.SUBMITTED)
+    comment = db.Column(db.String(300), nullable=False)
+
+
+    created_at = db.Column(db.DateTime, nullable=False)
