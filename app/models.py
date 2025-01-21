@@ -129,12 +129,33 @@ class Board(db.Model):
     room_id = db.Column(db.Integer, db.ForeignKey('room.id'), nullable=False)
 
     title = db.Column(db.String(30), nullable=False)
-    comment = db.Column(db.String(300), nullable=False)
-    state = db.Column(dbEnum(BoardStatus), nullable=False, default=BoardStatus.SUBMITTED)
+    content = db.Column(db.String(300), nullable=False)
+    status = db.Column(dbEnum(BoardStatus), nullable=False, default=BoardStatus.SUBMITTED)
 
     created_at = db.Column(db.DateTime, nullable=False)
-    edited_at = db.Column(db.DateTime, nullable=False)
+    edited_at = db.Column(db.DateTime)
     
+
+    def __repr__(self):
+        return f'<Board {self.id}>'
+    
+    def to_dict(self):
+        created = self.created_at
+        edited = self.edited_at
+
+        created = created.strftime("%Y-%m-%d-%H-%M-%S")
+        edited = edited.strftime("%Y-%m-%d-%H-%M-%S")
+
+        return {
+            'id': self.id,
+            'user_id': self.user_id,
+            'room_id': self.room_id,
+            'title': self.title,
+            'content': self.content,
+            'status': self.status.value,
+            'created_at': created,
+            'edited_at': edited
+        }
 
 class BoardComment(db.Model):
     # __table_args__ = ( 
@@ -146,8 +167,25 @@ class BoardComment(db.Model):
     admin_id = db.Column(db.String(20), db.ForeignKey('user.user_id'), nullable=False)
     room_id = db.Column(db.Integer, db.ForeignKey('room.id'), nullable=False)
 
-    state = db.Column(dbEnum(BoardStatus), nullable=False, default=BoardStatus.SUBMITTED)
+    status = db.Column(dbEnum(BoardStatus), nullable=False, default=BoardStatus.SUBMITTED)
     comment = db.Column(db.String(300), nullable=False)
 
 
     created_at = db.Column(db.DateTime, nullable=False)
+
+    def __repr__(self):
+        return f'<BoardComment {self.id}>'
+    
+    def to_dict(self):
+        created = self.created_at
+        created = created.strftime("%Y-%m-%d-%H-%M-%S")
+
+        return {
+            'id': self.id,
+            'board_id': self.board_id,
+            'admin_id': self.admin_id,
+            'room_id': self.room_id,
+            'status': self.status.value,
+            'comment': self.comment,
+            'created_at': created
+        }

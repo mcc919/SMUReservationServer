@@ -455,11 +455,41 @@ def submit_board():
         return jsonify({"message": "올바른 JSON 형식이 아닙니다."}), 400
 
     data = request.get_json()  # JSON 데이터 받기
+    print(data)
 
     input_user_id = data.get('userId')
     input_room_id = data.get('roomId')
+    input_title = data.get('title')
+    input_content = data.get('content')
 
-    if not input_user_id or not input_room_id:
+    if not input_user_id or not input_room_id or not input_title or not input_content:
         return jsonify({"message":"필수 정보가 누락되었습니다."}), 400
     
-    return jsonify({"message": "성공적으로 제출되었습니다."}), 201
+    try:
+        created_at = datetime.now(timezone('Asia/Seoul')).replace(microsecond=0)
+    
+        new_board = Board(user_id=input_user_id,
+                        room_id=input_room_id,
+                        title=input_title,
+                        content=input_content,
+                        created_at=created_at,
+                        edited_at=created_at)
+                        
+        db.session.add(new_board)
+        db.session.commit()
+
+        return jsonify({"message": "성공적으로 제출되었습니다."}), 201
+    except Exception as e:
+        db.session.rollback()
+        print(e)
+        return jsonify({"message": "서버 내부 오류로 인해 제출에 실패하였습니다."}), 500
+
+
+@bp.route('/boardcomments/board/<board_id>', methods=['GET'])
+@jwt_required()
+def get_boardcomments(board_id):
+    try:
+        boardcomments = BoardComment.query.filter_by(id=board_id).all()
+        return jsonify([boardcomment.to_dict() for boardcomment in boardcomments]), 200
+    except Exception as e:
+        return jsonify({"message":e}), 404
