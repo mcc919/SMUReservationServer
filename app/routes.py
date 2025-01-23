@@ -446,7 +446,21 @@ def get_boards():
         return jsonify([board.to_dict() for board in boards]), 200
     except Exception as e:
         return jsonify({"message":e}), 404
-    
+
+@bp.route('/board/<int:board_id>', methods=['GET'])
+@jwt_required()
+def get_board_by_board_id(board_id):
+    print('왜안돼1')
+    try:
+        board_with_user = db.session.query(Board, User).join(User, Board.user_id==User.user_id).filter(Board.id==board_id).first()
+        print('왜안돼1')
+        board, user = board_with_user
+        board_dict = board.to_dict()
+        board_dict['user'] = user.to_dict()
+        print(board_dict)
+        return jsonify(board_dict), 200
+    except Exception as e:
+        print(e)
 
 @bp.route('/boards', methods=['POST'])
 @jwt_required()
