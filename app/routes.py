@@ -7,13 +7,15 @@ from app import db
 from sangmyung_univ_auth import auth_detail, auth
 from sqlalchemy import desc, case, or_, and_, asc
 from pytz import timezone
-from constants.reservation_settings import RESERVATION_OPEN_HOUR, RESERVATION_LIMIT_PER_DAY, RESERVATION_LIMIT_PER_ROOM
+from constants.reservation_settings import Settings
 from utils import stringToDatetime, stringToTime
 
 bp = Blueprint('routes', __name__)
 
 @bp.route('/')
 def index():
+    print(Settings.BOARD_MAX_TITLE_LENGTH)
+    print(Settings.to_dict(self=Settings()))
     return '<p>hello world</p>'
 
 @bp.route('/login', methods=['POST'])
@@ -49,7 +51,8 @@ def login():
 
 @bp.route("/reservation_settings", methods=["GET"])
 def get_reservation_settings():
-    return jsonify({"reservation_open_hour": RESERVATION_OPEN_HOUR}), 200
+    settings = Settings()
+    return jsonify(settings.to_dict()), 200
 
 
 @bp.route("/validateToken", methods=["GET"])
@@ -195,7 +198,7 @@ def create_reservation():
 
         #new_today_reserved_time = (datetime.combine(date.today(), _today_reserved_time) + _diff).time()
         new_today_reserved_time = (datetime.combine(date.today(), _today_reserved_time) + _time_to_reserve_before18).time()
-        if (start_time.time() < time(18, 0, 0) and RESERVATION_LIMIT_PER_DAY * 60 < new_today_reserved_time.hour * 60 + new_today_reserved_time.minute):
+        if (start_time.time() < time(18, 0, 0) and Settings.RESERVATION_LIMIT_PER_DAY * 60 < new_today_reserved_time.hour * 60 + new_today_reserved_time.minute):
             return jsonify({"message":
 f'''하루 최대 예약 가능 시간을 초과하였습니다.
 (현재까지 사용된 시간: {user.today_reserved_time})
@@ -438,15 +441,19 @@ def get_reservations_by_room_and_date(room_id, date):
         return jsonify({"message": "데이터베이스 처리 중 오류가 발생하였습니다."}), 500
 
 
+# 게시물 목록 전체를 불러옵니다.
+# 정렬 기준: 상태 최종 업데이트 오름차순
 @bp.route('/boards', methods=['GET'])
 @jwt_required()
 def get_boards():
     try:
-        boards = Board.query.all()
+        boards = Board.query.order_by(desc(Board.status_updated_at)).all()
         return jsonify([board.to_dict() for board in boards]), 200
     except Exception as e:
         return jsonify({"message":e}), 404
 
+
+# board_id에 해당하는 특정 게시물 한 개를 불러옵니다.
 @bp.route('/board/<int:board_id>', methods=['GET'])
 @jwt_required()
 def get_board_by_board_id(board_id):
@@ -487,7 +494,8 @@ def submit_board():
                         title=input_title,
                         content=input_content,
                         created_at=created_at,
-                        edited_at=created_at)
+                        edited_at=created_at,
+                        status_updated_at=created_at)
                         
         db.session.add(new_board)
         db.session.commit()

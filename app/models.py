@@ -2,6 +2,7 @@
 from app import db  # app/__init__.py에서 선언한 db 객체 가져오기
 from sqlalchemy import Enum as dbEnum
 from app.enums import UserRole, UserStatus, RoomStatus, RoomLocation, ReservationStatus, BoardStatus
+from constants.reservation_settings import Settings
 from datetime import datetime
 from pytz import timezone
 from utils import stringToTime
@@ -13,8 +14,8 @@ class User(db.Model):
     email = db.Column(db.String(100), unique=True, nullable=False)
 
     nationality = db.Column(db.String(20), nullable=False)
-    username_kor = db.Column(db.String(20), nullable=False)
-    username_eng = db.Column(db.String(20), nullable=False)
+    username_kor = db.Column(db.String(20), nullable=True, default="")
+    username_eng = db.Column(db.String(20), nullable=True, default="")
     username_cha = db.Column(db.String(20), nullable=True, default="")
 
     grade = db.Column(db.Integer, nullable=False)
@@ -25,7 +26,7 @@ class User(db.Model):
     status = db.Column(dbEnum(UserStatus), nullable=False, default=UserStatus.ACTIVE)
 
     # Limit is 6 hours in 1 day.
-    today_reserved_time = db.Column(db.Integer, nullable=False, default='00:00:00')
+    today_reserved_time = db.Column(db.String(20), nullable=False, default='00:00:00')
 
     #time = datetime.now(timezone('Asia/Seoul')).replace(microsecond=0)
     created_at = db.Column(db.DateTime, nullable=False)
@@ -121,19 +122,21 @@ class Reservation(db.Model):
     
 class Board(db.Model):
     __table_args__ = ( 
-        db.Index('idx_board_created_at', 'created_at'),
+        db.Index('idx_board_status_updated_at', 'status_updated_at'),
     )
 
     id = db.Column(db.Integer, primary_key=True, nullable=False, autoincrement=True)
     user_id = db.Column(db.String(20), db.ForeignKey('user.user_id'), nullable=False)
     room_id = db.Column(db.Integer, db.ForeignKey('room.id'), nullable=False)
 
-    title = db.Column(db.String(30), nullable=False)
-    content = db.Column(db.String(300), nullable=False)
+    title = db.Column(db.String(Settings.BOARD_MAX_TITLE_LENGTH), nullable=False)
+    content = db.Column(db.String(Settings.BOARD_MAX_CONTENT_LENGTH), nullable=False)
     status = db.Column(dbEnum(BoardStatus), nullable=False, default=BoardStatus.SUBMITTED)
 
     created_at = db.Column(db.DateTime, nullable=False)
     edited_at = db.Column(db.DateTime)
+
+    status_updated_at = db.Column(db.DateTime, nullable=False)
     
 
     def __repr__(self):
@@ -142,9 +145,11 @@ class Board(db.Model):
     def to_dict(self):
         created = self.created_at
         edited = self.edited_at
+        updated = self.status_updated_at
 
         created = created.strftime("%Y-%m-%d-%H-%M-%S")
         edited = edited.strftime("%Y-%m-%d-%H-%M-%S")
+        updated = updated.strftime("%Y-%m-%d-%H-%M-%S")
 
         return {
             'id': self.id,
@@ -154,7 +159,8 @@ class Board(db.Model):
             'content': self.content,
             'status': self.status.value,
             'created_at': created,
-            'edited_at': edited
+            'edited_at': edited,
+            'status_updated_at': updated
         }
 
 class BoardComment(db.Model):
