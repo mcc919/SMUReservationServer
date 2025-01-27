@@ -2,7 +2,7 @@
 from app import db  # app/__init__.py에서 선언한 db 객체 가져오기
 from sqlalchemy import Enum as dbEnum
 from app.enums import UserRole, UserStatus, RoomStatus, RoomLocation, ReservationStatus, BoardStatus
-from constants.reservation_settings import Settings
+from constants.settings import Settings
 from datetime import datetime
 from pytz import timezone
 from utils import stringToTime
@@ -164,9 +164,9 @@ class Board(db.Model):
         }
 
 class BoardComment(db.Model):
-    # __table_args__ = ( 
-    #     db.Index('idx_created_at', 'created_at'),
-    # )
+    __table_args__ = ( 
+        db.Index('idx_comment_created_at', 'created_at'),
+    )
     
     id = db.Column(db.Integer, primary_key=True, nullable=False, autoincrement=True)
     board_id = db.Column(db.Integer, db.ForeignKey('board.id'), nullable=False, autoincrement=True)

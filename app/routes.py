@@ -2,12 +2,12 @@ from flask import Blueprint, jsonify, request
 from flask_jwt_extended import create_access_token, get_jwt_identity, jwt_required
 from datetime import datetime, date, time, timedelta
 from app.models import User, Room, Reservation, Board, BoardComment
-from app.enums import ReservationStatus, UserStatus, BoardStatus
+from app.enums import ReservationStatus, UserStatus, BoardStatus, UserRole
 from app import db
 from sangmyung_univ_auth import auth_detail, auth
 from sqlalchemy import desc, case, or_, and_, asc
 from pytz import timezone
-from constants.reservation_settings import Settings
+from constants.settings import Settings
 from utils import stringToDatetime, stringToTime
 
 bp = Blueprint('routes', __name__)
@@ -49,8 +49,8 @@ def login():
             }
             return jsonify(result), 200
 
-@bp.route("/reservation_settings", methods=["GET"])
-def get_reservation_settings():
+@bp.route("/settings", methods=["GET"])
+def get_settings():
     settings = Settings()
     return jsonify(settings.to_dict()), 200
 
@@ -457,16 +457,15 @@ def get_boards():
 @bp.route('/board/<int:board_id>', methods=['GET'])
 @jwt_required()
 def get_board_by_board_id(board_id):
-    print('왜안돼1')
     try:
         board_with_user = db.session.query(Board, User).join(User, Board.user_id==User.user_id).filter(Board.id==board_id).first()
-        print('왜안돼1')
         board, user = board_with_user
         board_dict = board.to_dict()
         board_dict['user'] = user.to_dict()
         print(board_dict)
         return jsonify(board_dict), 200
     except Exception as e:
+        db.session.rollback()
         print(e)
 
 @bp.route('/boards', methods=['POST'])
@@ -511,7 +510,77 @@ def submit_board():
 @jwt_required()
 def get_boardcomments(board_id):
     try:
-        boardcomments = BoardComment.query.filter_by(id=board_id).all()
+        boardcomments = BoardComment.query.filter_by(board_id=board_id).order_by(asc(BoardComment.created_at)).all()
         return jsonify([boardcomment.to_dict() for boardcomment in boardcomments]), 200
     except Exception as e:
+        return jsonify({"message":e}), 404
+    
+@bp.route('/boardcomment', methods=['POST'])
+@jwt_required()
+def create_comment():
+    if not request.is_json:
+        return jsonify({"message": "올바른 JSON 형식이 아닙니다."}), 400
+
+    data = request.get_json()  # JSON 데이터 받기
+
+    input_user_id = data.get('userId')
+    input_room_id = data.get('roomId')
+    input_board_id = data.get('boardId')
+    input_content = data.get('content')
+    input_selected_state = data.get('state')
+
+    if not input_user_id or not input_content or not input_selected_state or not input_board_id or not input_room_id:
+        return jsonify({"message":"필수 정보가 누락되었습니다."}), 400
+
+    try:
+        board = Board.query.filter_by(id=input_board_id).first()
+        if board is None:
+            return jsonify({"message": "게시글이 존재하지 않습니다."}), 404
+        
+        user = User.query.filter_by(user_id=input_user_id).first()
+        if user is None:
+            return jsonify({"message": "회원가입이 필요한 서비스입니다."}), 403
+        
+        if user.status == UserRole.USER:
+            return jsonify({"message": "답변을 작성할 권한이 없습니다."}), 409
+
+        if (input_selected_state == BoardStatus.UNDER_REVIEW.value):
+            _status = BoardStatus.UNDER_REVIEW
+        elif (input_selected_state == BoardStatus.REJECTED.value):
+            _status = BoardStatus.REJECTED
+        elif (input_selected_state == BoardStatus.NEED_REVISION.value):
+            _status = BoardStatus.NEED_REVISION
+        elif (input_selected_state == BoardStatus.APPROVED.value):
+            _status = BoardStatus.APPROVED
+        elif (input_selected_state == BoardStatus.IN_PROGRESS.value):
+            _status = BoardStatus.IN_PROGRESS
+        elif (input_selected_state == BoardStatus.COMPLETED.value):
+            _status = BoardStatus.COMPLETED
+        elif (input_selected_state == BoardStatus.CANCELLED.value):
+            _status = BoardStatus.CANCELLED
+        elif (input_selected_state == BoardStatus.HOLD_ON.value):
+            _status = BoardStatus.HOLD_ON
+        else:
+            return jsonify({"message": "지정하신 상태는 올바른 형식이 아닙니다."}), 400
+        
+        _created_at = datetime.now(timezone('Asia/Seoul')).replace(microsecond=0)
+
+        new_comment = BoardComment(board_id=input_board_id,
+                                   admin_id=input_user_id,
+                                   room_id=input_room_id,
+                                   status=_status,
+                                   comment=input_content,
+                                   created_at=_created_at)
+        db.session.add(new_comment)
+
+        board.status_updated_at = _created_at
+        board.status = _status
+        
+        db.session.commit()
+
+
+        return jsonify({"message": '답변이 성공적으로 업로드되었습니다!'}), 201
+    except Exception as e:
+        print('야야야야야에러뜸: :', e)
+        db.session.rollback()
         return jsonify({"message":e}), 404
