@@ -40,6 +40,10 @@ def login():
 
         if user is None:
             return jsonify({"message": "회원가입 필요"}), 404
+        
+        if user.status == UserStatus.INACTIVE:
+            return jsonify({"message": "승인 대기 중인 계정입니다. 관리자에게 문의하세요."}), 403
+
         else:
             print('가입 날짜: ', user.created_at)
             result = {
@@ -119,6 +123,31 @@ def get_rooms():
     rooms = Room.query.all()
     rooms = [room.to_dict() for room in rooms]
     return jsonify(rooms), 200
+
+
+@bp.route('/user/all/<id>', methods=['GET'])
+@jwt_required()
+def get_user_all(id):
+    try:
+        user = User.query.filter_by(user_id=id).first()
+
+        if user is None:
+            return jsonify({'message': '회원가입 후 이용해주세요.'}), 404
+        
+        if user.role == UserRole.USER:
+            return jsonify({'message': '접근 권한이 없습니다.'}), 409
+        
+        profiles = User.query.all()
+
+        return jsonify([profile.to_dict() for profile in profiles]), 200
+
+    except Exception as e:
+        db.session.rollback()
+        print(e)
+        return jsonify({"message": e}), 404
+    
+    
+
 
 @bp.route('/user/<id>', methods=['GET'])
 @jwt_required()
@@ -511,7 +540,16 @@ def submit_board():
 def get_boardcomments(board_id):
     try:
         boardcomments = BoardComment.query.filter_by(board_id=board_id).order_by(asc(BoardComment.created_at)).all()
-        return jsonify([boardcomment.to_dict() for boardcomment in boardcomments]), 200
+        result = []
+        for boardcomment in boardcomments:
+            admin = User.query.filter_by(user_id=boardcomment.admin_id).first()
+            if admin is None:
+                return jsonify({"message":"답변자 정보를 찾을 수 없습니다."}), 404
+            
+            _data = boardcomment.to_dict()
+            _data["writer"] = admin.to_dict()
+            result.append(_data)
+        return jsonify(result), 200
     except Exception as e:
         return jsonify({"message":e}), 404
     
@@ -540,8 +578,8 @@ def create_comment():
         user = User.query.filter_by(user_id=input_user_id).first()
         if user is None:
             return jsonify({"message": "회원가입이 필요한 서비스입니다."}), 403
-        
-        if user.status == UserRole.USER:
+        print(user.role)
+        if user.role == UserRole.USER:
             return jsonify({"message": "답변을 작성할 권한이 없습니다."}), 409
 
         if (input_selected_state == BoardStatus.UNDER_REVIEW.value):

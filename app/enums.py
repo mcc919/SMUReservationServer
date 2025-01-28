@@ -5,6 +5,7 @@ class UserRole(Enum):
     USER =  'user'              # 일반 사용자
 
 class UserStatus(Enum):
+    UNAPPROVED = 'unapproved'   # 승인되지 않음 (최초 상태)
     ACTIVE = 'active'           # 활성화
     INACTIVE = 'inactive'       # 비활성화
     BANNED = 'banned'           # 사용 정지

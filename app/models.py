@@ -23,7 +23,7 @@ class User(db.Model):
 
     # Below are initialized with default values
     role = db.Column(dbEnum(UserRole), nullable=False, default=UserRole.USER)
-    status = db.Column(dbEnum(UserStatus), nullable=False, default=UserStatus.ACTIVE)
+    status = db.Column(dbEnum(UserStatus), nullable=False, default=UserStatus.UNAPPROVED)
 
     # Limit is 6 hours in 1 day.
     today_reserved_time = db.Column(db.String(20), nullable=False, default='00:00:00')
