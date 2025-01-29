@@ -18,6 +18,14 @@ def index():
     print(Settings.to_dict(self=Settings()))
     return '<p>hello world</p>'
 
+@bp.route('/user/<id>', methods=['GET'])
+def get_user_info(id):
+    user = User.query.filter_by(user_id=id).first()
+    if user is None:
+        return jsonify({"message": "유저 정보를 찾을 수 없습니다."}), 404
+    
+    return jsonify(user.to_dict()), 200
+
 @bp.route('/login', methods=['POST'])
 def login():
     user_id = request.form['userId']
