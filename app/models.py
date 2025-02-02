@@ -195,3 +195,27 @@ class BoardComment(db.Model):
             'comment': self.comment,
             'created_at': created
         }
+    
+class UserStatusLog(db.Model):
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    user_id = db.Column(db.String(20), db.ForeignKey('user.user_id'), nullable=False)  # 상태 변경된 유저
+    previous_status = db.Column(dbEnum(UserStatus), nullable=False)  # 변경 전 상태
+    new_status = db.Column(dbEnum(UserStatus), nullable=False)  # 변경 후 상태
+    changed_by = db.Column(db.String(20), db.ForeignKey('user.user_id'), nullable=True)  # 변경한 관리자
+    reason = db.Column(db.String(300), nullable=True)  # 변경 이유 (선택 사항)
+    changed_at = db.Column(db.DateTime, nullable=False)
+    unban_date = db.Column(db.DateTime, nullable=True)  # 만약 ban일 경우 해제되는 날짜
+
+    def __repr__(self):
+        return f'<UserStatusLog {self.id} - {self.user_id} {self.previous_status.value} -> {self.new_status.value}>'
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'user_id': self.user_id,
+            'previous_status': self.previous_status.value,
+            'new_status': self.new_status.value,
+            'changed_by': self.changed_by,
+            'reason': self.reason,
+            'changed_at': self.changed_at.strftime("%Y-%m-%d-%H-%M-%S")
+        }

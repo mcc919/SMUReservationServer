@@ -154,7 +154,6 @@ def get_user_all(id):
         print(e)
         return jsonify({"message": e}), 404
     
-    
 
 
 @bp.route('/user/<id>', methods=['GET'])
@@ -167,6 +166,73 @@ def get_user(id):
         return jsonify({'message': '유저 정보를 찾을 수 없습니다.'}), 404
     
     return jsonify(user.to_dict()), 200
+
+
+
+@bp.route('/user/accept', methods=['POST'])
+@jwt_required()
+def accept_user():
+    if not request.is_json:
+        return jsonify({"message": "올바른 JSON 형식이 아닙니다."}), 400
+
+    data = request.get_json()  # JSON 데이터 받기
+
+    input_user_id = data.get('userId')
+    input_admin_id = data.get('adminId')
+
+    input_date = data.get('date')
+
+    if not input_user_id or not input_admin_id or not input_date:
+        return jsonify({"message":"필수 정보가 누락되었습니다."}), 400
+
+    try:
+        pass
+    except Exception as e:
+        return jsonify({"message": e}), 500
+
+
+
+@bp.route('/user/delete', method=["DELETE"])
+@jwt_required()
+def delete_user():
+    pass
+
+
+
+@bp.route('/user/deactivate', method=["POST"])
+@jwt_required()
+def deactivate_user():
+    pass
+
+
+
+@bp.route('/user/promote', method=["POST"])
+@jwt_required()
+def promote_user_to_admin():
+    pass
+
+
+
+@bp.route('/user/demote', method=["POST"])
+@jwt_required()
+def demote_admin_to_user():
+    pass
+
+
+
+@bp.route('/user/ban', method=["POST"])
+@jwt_required()
+def ban_user():
+    pass
+
+
+
+@bp.route('/user/unban', method=["POST"])
+@jwt_required()
+def unban_user():
+    pass
+
+
 
 
 @bp.route('/reservations', methods=['POST'])
