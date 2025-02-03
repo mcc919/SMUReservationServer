@@ -1,7 +1,7 @@
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import create_access_token, get_jwt_identity, jwt_required
 from datetime import datetime, date, time, timedelta
-from app.models import User, Room, Reservation, Board, BoardComment
+from app.models import User, Room, Reservation, Board, BoardComment, UserStatusLog
 from app.enums import ReservationStatus, UserStatus, BoardStatus, UserRole
 from app import db
 from sangmyung_univ_auth import auth_detail, auth
@@ -133,6 +133,7 @@ def get_rooms():
     return jsonify(rooms), 200
 
 
+# get every user list (only for admin)
 @bp.route('/user/all/<id>', methods=['GET'])
 @jwt_required()
 def get_user_all(id):
@@ -155,7 +156,7 @@ def get_user_all(id):
         return jsonify({"message": e}), 404
     
 
-
+# get specific user info
 @bp.route('/user/<id>', methods=['GET'])
 @jwt_required()
 def get_user(id):
@@ -163,7 +164,7 @@ def get_user(id):
     user = User.query.filter_by(user_id=id).first()
 
     if user is None:
-        return jsonify({'message': '유저 정보를 찾을 수 없습니다.'}), 404
+        return jsonify({'message': '해당 유저 정보를 찾을 수 없습니다.'}), 404
     
     return jsonify(user.to_dict()), 200
 
@@ -180,54 +181,165 @@ def accept_user():
     input_user_id = data.get('userId')
     input_admin_id = data.get('adminId')
 
-    input_date = data.get('date')
-
-    if not input_user_id or not input_admin_id or not input_date:
+    if not input_user_id or not input_admin_id:
         return jsonify({"message":"필수 정보가 누락되었습니다."}), 400
 
     try:
-        pass
+        admin = User.query.filter_by(user_id=input_admin_id).first()
+        if admin is None:
+            return jsonify({"message": "사용자님의 회원 정보를 데이터베이스에서 찾을 수 없습니다."}), 403
+        
+        if admin.role != UserRole.ADMIN:
+            return jsonify({"message": "관리자 권한이 없습니다."}), 409
+
+        user = User.query.filter_by(user_id=input_user_id).first()
+        if user is None:
+            return jsonify({"message": "사용자 정보를 찾을 수 없습니다."}), 404
+
+        if user.status != UserStatus.UNAPPROVED:
+            return jsonify({"message": "이미 활성화된 계정입니다."}), 409
+        
+        changed_at = datetime.now(timezone('Asia/Seoul')).replace(microsecond=0)
+
+        new_log = UserStatusLog(user_id=input_user_id,
+                              previous_status=user.status,
+                              new_status=UserStatus.ACTIVE,
+                              changed_at=changed_at)
+        db.session.add(new_log)
+
+        user.status = UserStatus.ACTIVE
+
+        db.session.commit()
+        return jsonify({"message": "성공적으로 반영되었습니다."}), 201
+
     except Exception as e:
+        db.session.rollback()
+        return jsonify({"message": e}), 500
+
+
+# delete join request
+@bp.route('/user/delete', methods=["DELETE"])
+@jwt_required()
+def delete_user():
+    if not request.is_json:
+        return jsonify({"message": "올바른 JSON 형식이 아닙니다."}), 400
+
+    data = request.get_json()  # JSON 데이터 받기
+
+    input_user_id = data.get('userId')
+    input_admin_id = data.get('adminId')
+
+    if not input_user_id or not input_admin_id:
+        return jsonify({"message":"필수 정보가 누락되었습니다."}), 400
+
+    try:
+        admin = User.query.filter_by(user_id=input_admin_id).first()
+        if admin is None:
+            return jsonify({"message": "사용자님의 회원 정보를 데이터베이스에서 찾을 수 없습니다."}), 403
+        
+        if admin.role != UserRole.ADMIN:
+            return jsonify({"message": "관리자 권한이 없습니다."}), 409
+
+        user = User.query.filter_by(user_id=input_user_id).first()
+        if user is None:
+            return jsonify({"message": "사용자 정보를 찾을 수 없습니다."}), 404
+
+        if user.status != UserStatus.UNAPPROVED:
+            return jsonify({"message": "해당 사용자는 삭제 대상이 아닙니다. (가입 요청만 삭제 가능합니다.)"}), 409
+       
+        changed_at = datetime.now(timezone('Asia/Seoul')).replace(microsecond=0)
+
+        new_log = UserStatusLog(user_id=input_user_id,
+                              previous_status=user.status,
+                              new_status=UserStatus.DELETED,
+                              changed_at=changed_at)
+        db.session.add(new_log)
+
+        user.status = UserStatus.DELETED    # 삭제할거라 의미는 없는데 일단
+        db.session.delete(user)
+
+        db.session.commit()
+        return jsonify({"message": "성공적으로 반영되었습니다."}), 201
+
+    except Exception as e:
+        db.session.rollback()
         return jsonify({"message": e}), 500
 
 
 
-@bp.route('/user/delete', method=["DELETE"])
-@jwt_required()
-def delete_user():
-    pass
-
-
-
-@bp.route('/user/deactivate', method=["POST"])
+@bp.route('/user/deactivate', methods=["POST"])
 @jwt_required()
 def deactivate_user():
     pass
 
 
 
-@bp.route('/user/promote', method=["POST"])
+@bp.route('/user/promote', methods=["POST"])
 @jwt_required()
 def promote_user_to_admin():
     pass
 
 
 
-@bp.route('/user/demote', method=["POST"])
+@bp.route('/user/demote', methods=["POST"])
 @jwt_required()
 def demote_admin_to_user():
     pass
 
 
 
-@bp.route('/user/ban', method=["POST"])
+@bp.route('/user/ban', methods=["POST"])
 @jwt_required()
 def ban_user():
-    pass
+    if not request.is_json:
+        return jsonify({"message": "올바른 JSON 형식이 아닙니다."}), 400
+
+    data = request.get_json()  # JSON 데이터 받기
+
+    input_user_id = data.get('userId')
+    input_admin_id = data.get('adminId')
+    input_ban_days = data.get('banDays')
+    input_reason = data.get('reason')
+
+    if not input_user_id or not input_admin_id or not input_ban_days or not input_reason:
+        return jsonify({"message":"필수 정보가 누락되었습니다."}), 400
+
+    try:
+        admin = User.query.filter_by(user_id=input_admin_id).first()
+        if admin is None:
+            return jsonify({"message": "사용자님의 회원 정보를 데이터베이스에서 찾을 수 없습니다."}), 403
+        
+        if admin.role != UserRole.ADMIN:
+            return jsonify({"message": "관리자 권한이 없습니다."}), 409
+
+        user = User.query.filter_by(user_id=input_user_id).first()
+        if user is None:
+            return jsonify({"message": "사용자 정보를 찾을 수 없습니다."}), 404
+
+        if user.status != UserStatus.ACTIVE:
+            return jsonify({"message": "해당 사용자는 정지 대상이 아닙니다."}), 409
+       
+        changed_at = datetime.now(timezone('Asia/Seoul')).replace(microsecond=0)
+
+        new_log = UserStatusLog(user_id=input_user_id,
+                              previous_status=user.status,
+                              new_status=UserStatus.DELETED,
+                              changed_at=changed_at)
+        db.session.add(new_log)
+
+        user.status = UserStatus.DELETED    # 삭제할거라 의미는 없는데 일단
+        db.session.delete(user)
+
+        db.session.commit()
+        return jsonify({"message": "성공적으로 반영되었습니다."}), 201
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"message": e}), 500
 
 
 
-@bp.route('/user/unban', method=["POST"])
+@bp.route('/user/unban', methods=["POST"])
 @jwt_required()
 def unban_user():
     pass

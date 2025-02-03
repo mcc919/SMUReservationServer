@@ -9,6 +9,7 @@ class UserStatus(Enum):
     ACTIVE = 'active'           # 활성화
     INACTIVE = 'inactive'       # 비활성화
     BANNED = 'banned'           # 사용 정지
+    DELETED = 'deleted'         # 삭제됨
 
 class RoomStatus(Enum):
     AVAILABLE = 'available'     # 사용 가능
