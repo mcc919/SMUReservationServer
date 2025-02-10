@@ -199,7 +199,7 @@ class BoardComment(db.Model):
 class UserStatusLog(db.Model):
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     user_id = db.Column(db.String(20), db.ForeignKey('user.user_id'), nullable=False)  # 상태 변경된 유저
-    changed_by = db.Column(db.String(20), db.ForeignKey('user.user_id'), nullable=True)  # 변경한 관리자
+    changed_by = db.Column(db.String(20), db.ForeignKey('user.user_id'), nullable=False)  # 변경한 관리자
     previous_status = db.Column(dbEnum(UserStatus), nullable=False)  # 변경 전 상태
     new_status = db.Column(dbEnum(UserStatus), nullable=False)  # 변경 후 상태
     reason = db.Column(db.String(300), nullable=True)  # 변경 이유 (선택 사항)
@@ -222,5 +222,29 @@ class UserStatusLog(db.Model):
 
         if self.new_status == UserStatus.BANNED:
             result['unban_at'] = self.self.unban_at.strftime("%Y-%m-%d-%H-%M-%S")
+
+        return result
+
+
+class UserRoleLog(db.Model):
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    user_id = db.Column(db.String(20), db.ForeignKey('user.user_id'), nullable=False)  # 상태 변경된 유저
+    changed_by = db.Column(db.String(20), db.ForeignKey('user.user_id'), nullable=False)  # 변경한 관리자
+    previous_role = db.Column(dbEnum(UserRole), nullable=False)  # 변경 전 상태
+    new_role = db.Column(dbEnum(UserRole), nullable=False)  # 변경 후 상태
+    changed_at = db.Column(db.DateTime, nullable=False)
+
+    def __repr__(self):
+        return f'<UserRoleLog {self.id} - {self.user_id} {self.previous_role.value} -> {self.new_role.value}>'
+    
+    def to_dict(self):
+        result = {
+            'id': self.id,
+            'user_id': self.user_id,
+            'previous_role': self.previous_role.value,
+            'new_role': self.new_role.value,
+            'changed_by': self.changed_by,
+            'changed_at': self.changed_at.strftime("%Y-%m-%d-%H-%M-%S")
+        }
 
         return result

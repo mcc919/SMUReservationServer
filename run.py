@@ -7,6 +7,7 @@ from datetime import datetime, date, timedelta
 from apscheduler.schedulers.background import BackgroundScheduler
 from app.enums import ReservationStatus
 from app.models import Reservation
+from flask import jsonify
 
 relative_path = 'custom_library'
 package_path = os.path.join(os.getcwd(), relative_path)
@@ -56,6 +57,16 @@ def reset_today_reserved_time():
         db.session.commit()
         print("유저 하루 예약 시간 초기화 완료")
 
+# @app.errorhandler(404)
+# def not_found(error):
+#     print(error)
+#     return jsonify({"error": "API 경로가 존재하지 않습니다."}), 404
+
+# @app.errorhandler(404)
+# def interner_error(error):
+#     print(error)
+#     return jsonify({"error": "서버 내부에서 오류가 발생하였습니다."}), 500
+
 if __name__ == "__main__":
     initialize_db(app)
     update_reservation_state()
@@ -69,7 +80,7 @@ if __name__ == "__main__":
     print("스케줄러 시작!")
     try:
         # Flask 앱 실행
-        app.run(host='0.0.0.0', port=5000)
+        app.run(host='0.0.0.0', port=5000, debug=True)
     except (KeyboardInterrupt, SystemExit):
         scheduler.shutdown()  # 스케줄러 종료
         print("스케줄러 종료!")

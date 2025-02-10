@@ -1,7 +1,7 @@
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import create_access_token, get_jwt_identity, jwt_required
 from datetime import datetime, date, time, timedelta
-from app.models import User, Room, Reservation, Board, BoardComment, UserStatusLog
+from app.models import User, Room, Reservation, Board, BoardComment, UserStatusLog, UserRoleLog
 from app.enums import ReservationStatus, UserStatus, BoardStatus, UserRole
 from app import db
 from sangmyung_univ_auth import auth_detail, auth
@@ -25,6 +25,21 @@ def get_user_info(id):
         return jsonify({"message": "유저 정보를 찾을 수 없습니다."}), 404
     
     return jsonify(user.to_dict()), 200
+
+
+@bp.route('/user/logs/<id>', methods=['GET'])
+def get_user_log_info(id):
+    logs = UserStatusLog.query.filter_by(user_id=id).all()
+    if logs is None:
+        return jsonify({"message": "유저 상태 변경 기록이 없습니다."}), 200
+    
+    print(logs)
+    logs = [log.to_dict() for log in logs]
+    print('test')
+    print(logs)
+    print('test')
+    return jsonify(logs), 200
+
 
 @bp.route('/login', methods=['POST'])
 def login():
@@ -154,20 +169,6 @@ def get_user_all(id):
         db.session.rollback()
         print(e)
         return jsonify({"message": e}), 404
-    
-
-# get specific user info
-@bp.route('/user/<id>', methods=['GET'])
-@jwt_required()
-def get_user(id):
-    print(id)
-    user = User.query.filter_by(user_id=id).first()
-
-    if user is None:
-        return jsonify({'message': '해당 유저 정보를 찾을 수 없습니다.'}), 404
-    
-    return jsonify(user.to_dict()), 200
-
 
 
 @bp.route('/user/accept', methods=['POST'])
@@ -202,9 +203,10 @@ def accept_user():
         changed_at = datetime.now(timezone('Asia/Seoul')).replace(microsecond=0)
 
         new_log = UserStatusLog(user_id=input_user_id,
-                              previous_status=user.status,
-                              new_status=UserStatus.ACTIVE,
-                              changed_at=changed_at)
+                                changed_by=input_admin_id,
+                                previous_status=user.status,
+                                new_status=UserStatus.ACTIVE,
+                                changed_at=changed_at)
         db.session.add(new_log)
 
         user.status = UserStatus.ACTIVE
@@ -250,9 +252,10 @@ def delete_user():
         changed_at = datetime.now(timezone('Asia/Seoul')).replace(microsecond=0)
 
         new_log = UserStatusLog(user_id=input_user_id,
-                              previous_status=user.status,
-                              new_status=UserStatus.DELETED,
-                              changed_at=changed_at)
+                                changed_by=input_admin_id,
+                                previous_status=user.status,
+                                new_status=UserStatus.DELETED,
+                                changed_at=changed_at)
         db.session.add(new_log)
 
         user.status = UserStatus.DELETED    # 삭제할거라 의미는 없는데 일단
@@ -277,14 +280,108 @@ def deactivate_user():
 @bp.route('/user/promote', methods=["POST"])
 @jwt_required()
 def promote_user_to_admin():
-    pass
+    if not request.is_json:
+        return jsonify({"message": "올바른 JSON 형식이 아닙니다."}), 400
+
+    data = request.get_json()  # JSON 데이터 받기
+
+    input_user_id = data.get('userId')
+    input_admin_id = data.get('adminId')
+
+    if not input_user_id or not input_admin_id:
+        return jsonify({"message":"필수 정보가 누락되었습니다."}), 400
+
+    print("input data::", data)
+    
+    try:
+        admin = User.query.filter_by(user_id=input_admin_id).first()
+        if admin is None:
+            return jsonify({"message": "사용자님의 정보를 데이터베이스에서 찾을 수 없습니다."}), 403
+        
+        if admin.role != UserRole.ADMIN:
+            return jsonify({"message": "관리자 권한이 없습니다."}), 409
+
+        user = User.query.filter_by(user_id=input_user_id).first()
+        if user is None:
+            return jsonify({"message": "대상자의 정보를 찾을 수 없습니다."}), 404
+
+        if user.status != UserStatus.ACTIVE:
+            return jsonify({"message": "해당 사용자는 권한 부여 대상이 아닙니다. 비활성화가 해제되거나 정지 기간이 끝나면 다시 시도해주세요."}), 409
+        
+        if user.role == UserRole.ADMIN:
+            return jsonify({"message": "해당 사용자는 이미 관리자입니다."}), 409
+       
+        changed_at = datetime.now(timezone('Asia/Seoul')).replace(microsecond=0)
+
+        new_log = UserRoleLog(user_id=input_user_id,
+                                changed_by=input_admin_id,
+                                previous_role=user.role,
+                                new_role=UserRole.ADMIN,
+                                changed_at=changed_at)
+        db.session.add(new_log)
+
+        user.role = UserRole.ADMIN
+
+        db.session.commit()
+        return jsonify({"message": "성공적으로 반영되었습니다."}), 201
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"message": e}), 500
 
 
 
 @bp.route('/user/demote', methods=["POST"])
 @jwt_required()
 def demote_admin_to_user():
-    pass
+    if not request.is_json:
+        return jsonify({"message": "올바른 JSON 형식이 아닙니다."}), 400
+
+    data = request.get_json()  # JSON 데이터 받기
+
+    input_user_id = data.get('userId')
+    input_admin_id = data.get('adminId')
+
+    if not input_user_id or not input_admin_id:
+        return jsonify({"message":"필수 정보가 누락되었습니다."}), 400
+
+    print("input data::", data)
+    
+    try:
+        admin = User.query.filter_by(user_id=input_admin_id).first()
+        if admin is None:
+            return jsonify({"message": "사용자님의 정보를 데이터베이스에서 찾을 수 없습니다."}), 403
+        
+        if admin.role != UserRole.ADMIN:
+            return jsonify({"message": "관리자 권한이 없습니다."}), 409
+
+        user = User.query.filter_by(user_id=input_user_id).first()
+        if user is None:
+            return jsonify({"message": "대상자의 정보를 찾을 수 없습니다."}), 404
+
+        if user.status == UserStatus.UNAPPROVED:
+            return jsonify({"message": "해당 사용자는 권한 박탈 대상이 아닙니다."}), 409
+        
+        if user.role == UserRole.USER:
+            return jsonify({"message": "해당 사용자는 이미 관리자가 아닙니다."}), 409
+       
+        changed_at = datetime.now(timezone('Asia/Seoul')).replace(microsecond=0)
+
+        new_log = UserRoleLog(user_id=input_user_id,
+                                changed_by=input_admin_id,
+                                previous_role=user.role,
+                                new_role=UserRole.USER,
+                                changed_at=changed_at)
+        db.session.add(new_log)
+
+        user.role = UserRole.USER
+
+        db.session.commit()
+        return jsonify({"message": "성공적으로 반영되었습니다."}), 201
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"message": e}), 500
 
 
 
@@ -298,23 +395,25 @@ def ban_user():
 
     input_user_id = data.get('userId')
     input_admin_id = data.get('adminId')
-    input_ban_days = data.get('banDays')
+    input_unban_at = data.get('unbanAt')
     input_reason = data.get('reason')
 
-    if not input_user_id or not input_admin_id or not input_ban_days or not input_reason:
+    if not input_user_id or not input_admin_id or not input_unban_at or not input_reason:
         return jsonify({"message":"필수 정보가 누락되었습니다."}), 400
 
+    print("input data::", data)
+    
     try:
         admin = User.query.filter_by(user_id=input_admin_id).first()
         if admin is None:
-            return jsonify({"message": "사용자님의 회원 정보를 데이터베이스에서 찾을 수 없습니다."}), 403
+            return jsonify({"message": "사용자님의 정보를 데이터베이스에서 찾을 수 없습니다."}), 403
         
         if admin.role != UserRole.ADMIN:
             return jsonify({"message": "관리자 권한이 없습니다."}), 409
 
         user = User.query.filter_by(user_id=input_user_id).first()
         if user is None:
-            return jsonify({"message": "사용자 정보를 찾을 수 없습니다."}), 404
+            return jsonify({"message": "정지 대상자의 정보를 찾을 수 없습니다."}), 404
 
         if user.status != UserStatus.ACTIVE:
             return jsonify({"message": "해당 사용자는 정지 대상이 아닙니다."}), 409
@@ -322,13 +421,15 @@ def ban_user():
         changed_at = datetime.now(timezone('Asia/Seoul')).replace(microsecond=0)
 
         new_log = UserStatusLog(user_id=input_user_id,
-                              previous_status=user.status,
-                              new_status=UserStatus.DELETED,
-                              changed_at=changed_at)
+                                changed_by=input_admin_id,
+                                previous_status=user.status,
+                                new_status=UserStatus.BANNED,
+                                reason=input_reason,
+                                unban_at=stringToDatetime(input_unban_at),
+                                changed_at=changed_at)
         db.session.add(new_log)
 
-        user.status = UserStatus.DELETED    # 삭제할거라 의미는 없는데 일단
-        db.session.delete(user)
+        user.status = UserStatus.BANNED
 
         db.session.commit()
         return jsonify({"message": "성공적으로 반영되었습니다."}), 201
@@ -342,8 +443,51 @@ def ban_user():
 @bp.route('/user/unban', methods=["POST"])
 @jwt_required()
 def unban_user():
-    pass
+    if not request.is_json:
+        return jsonify({"message": "올바른 JSON 형식이 아닙니다."}), 400
 
+    data = request.get_json()  # JSON 데이터 받기
+
+    input_user_id = data.get('userId')
+    input_admin_id = data.get('adminId')
+
+    if not input_user_id or not input_admin_id:
+        return jsonify({"message":"필수 정보가 누락되었습니다."}), 400
+
+    print("input data::", data)
+    
+    try:
+        admin = User.query.filter_by(user_id=input_admin_id).first()
+        if admin is None:
+            return jsonify({"message": "사용자님의 정보를 데이터베이스에서 찾을 수 없습니다."}), 403
+        
+        if admin.role != UserRole.ADMIN:
+            return jsonify({"message": "관리자 권한이 없습니다."}), 409
+
+        user = User.query.filter_by(user_id=input_user_id).first()
+        if user is None:
+            return jsonify({"message": "정지 해제 대상자의 정보를 찾을 수 없습니다."}), 404
+
+        if user.status != UserStatus.BANNED:
+            return jsonify({"message": "해당 사용자는 정지 해제 대상이 아닙니다."}), 409
+       
+        changed_at = datetime.now(timezone('Asia/Seoul')).replace(microsecond=0)
+
+        new_log = UserStatusLog(user_id=input_user_id,
+                                changed_by=input_admin_id,
+                                previous_status=user.status,
+                                new_status=UserStatus.ACTIVE,
+                                changed_at=changed_at)
+        db.session.add(new_log)
+
+        user.status = UserStatus.ACTIVE
+
+        db.session.commit()
+        return jsonify({"message": "성공적으로 반영되었습니다."}), 201
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"message": e}), 500
 
 
 
