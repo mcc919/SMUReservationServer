@@ -197,6 +197,10 @@ class BoardComment(db.Model):
         }
     
 class UserStatusLog(db.Model):
+    __table_args__ = ( 
+        db.Index('idx_statuslog_changed_at', 'changed_at'),
+    )
+
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     user_id = db.Column(db.String(20), db.ForeignKey('user.user_id'), nullable=False)  # 상태 변경된 유저
     changed_by = db.Column(db.String(20), db.ForeignKey('user.user_id'), nullable=False)  # 변경한 관리자
@@ -227,6 +231,10 @@ class UserStatusLog(db.Model):
 
 
 class UserRoleLog(db.Model):
+    __table_args__ = ( 
+        db.Index('idx_rolelog_changed_at', 'changed_at'),
+    )
+
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     user_id = db.Column(db.String(20), db.ForeignKey('user.user_id'), nullable=False)  # 상태 변경된 유저
     changed_by = db.Column(db.String(20), db.ForeignKey('user.user_id'), nullable=False)  # 변경한 관리자

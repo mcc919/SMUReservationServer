@@ -27,20 +27,6 @@ def get_user_info(id):
     return jsonify(user.to_dict()), 200
 
 
-@bp.route('/user/logs/<id>', methods=['GET'])
-def get_user_log_info(id):
-    logs = UserStatusLog.query.filter_by(user_id=id).all()
-    if logs is None:
-        return jsonify({"message": "유저 상태 변경 기록이 없습니다."}), 200
-    
-    print(logs)
-    logs = [log.to_dict() for log in logs]
-    print('test')
-    print(logs)
-    print('test')
-    return jsonify(logs), 200
-
-
 @bp.route('/login', methods=['POST'])
 def login():
     user_id = request.form['userId']
@@ -161,7 +147,19 @@ def get_user_all(id):
         if user.role == UserRole.USER:
             return jsonify({'message': '접근 권한이 없습니다.'}), 409
         
-        profiles = User.query.all()
+        profiles = User.query.order_by(
+            case(
+                (User.role == UserRole.ADMIN, 1),
+                (User.status == UserStatus.ACTIVE, 2),
+                (User.status == UserStatus.BANNED, 3),
+                (User.status == UserStatus.INACTIVE, 4),
+                else_=5
+            ),
+            User.grade.asc()
+        ).all()
+
+        for user in profiles:
+            print(user.to_dict())
 
         return jsonify([profile.to_dict() for profile in profiles]), 200
 
@@ -269,12 +267,116 @@ def delete_user():
         return jsonify({"message": e}), 500
 
 
-
+# 관리자만 호출 가능
 @bp.route('/user/deactivate', methods=["POST"])
 @jwt_required()
 def deactivate_user():
-    pass
+    if not request.is_json:
+        return jsonify({"message": "올바른 JSON 형식이 아닙니다."}), 400
 
+    data = request.get_json()  # JSON 데이터 받기
+
+    input_user_id = data.get('userId')
+    input_admin_id = data.get('adminId')
+    input_user_reason = data.get('reason')
+
+    if not input_user_id or not input_admin_id or not input_user_reason:
+        return jsonify({"message":"필수 정보가 누락되었습니다."}), 400
+
+    print("input data::", data)
+    
+    try:
+        admin = User.query.filter_by(user_id=input_admin_id).first()
+        if admin is None:
+            return jsonify({"message": "사용자님의 정보를 데이터베이스에서 찾을 수 없습니다."}), 403
+        
+        # 관리자가 아닐 경우
+        if admin.role != UserRole.ADMIN:
+            return jsonify({"message": "관리자 권한이 없습니다."}), 409
+
+        user = User.query.filter_by(user_id=input_user_id).first()
+        if user is None:
+            return jsonify({"message": "대상자의 정보를 찾을 수 없습니다."}), 404
+
+        if user.status == UserStatus.INACTIVE:
+            return jsonify({"message": "해당 계정은 이미 비활성화 상태입니다."}), 409
+        
+        if user.status == UserStatus.DELETED:
+            return jsonify({"message": "삭제된 계정입니다."}), 409
+       
+        changed_at = datetime.now(timezone('Asia/Seoul')).replace(microsecond=0)
+
+        new_log = UserStatusLog(user_id=input_user_id,
+                                changed_by=input_admin_id,
+                                previous_status=user.status,
+                                new_status=UserStatus.INACTIVE,
+                                reason=input_user_reason,
+                                changed_at=changed_at)
+        db.session.add(new_log)
+
+        user.status = UserStatus.INACTIVE
+
+        db.session.commit()
+        return jsonify({"message": "성공적으로 반영되었습니다."}), 201
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"message": e}), 500
+
+
+# 관리자만 호출 가능
+@bp.route('/user/activate', methods=["POST"])
+@jwt_required()
+def activate_user():
+    if not request.is_json:
+        return jsonify({"message": "올바른 JSON 형식이 아닙니다."}), 400
+
+    data = request.get_json()  # JSON 데이터 받기
+
+    input_user_id = data.get('userId')
+    input_admin_id = data.get('adminId')
+
+    if not input_user_id or not input_admin_id:
+        return jsonify({"message":"필수 정보가 누락되었습니다."}), 400
+
+    print("input data::", data)
+    
+    try:
+        admin = User.query.filter_by(user_id=input_admin_id).first()
+        if admin is None:
+            return jsonify({"message": "사용자님의 정보를 데이터베이스에서 찾을 수 없습니다."}), 403
+        
+        # 본인이 아닌데 관리자가 아닐 경우
+        if input_admin_id != input_user_id and admin.role != UserRole.ADMIN:
+            return jsonify({"message": "관리자 권한이 없습니다."}), 409
+
+        user = User.query.filter_by(user_id=input_user_id).first()
+        if user is None:
+            return jsonify({"message": "대상자의 정보를 찾을 수 없습니다."}), 404
+
+        if user.status == UserStatus.ACTIVE:
+            return jsonify({"message": "해당 계정은 이미 활성화 상태입니다."}), 409
+        
+        if user.status == UserStatus.DELETED:
+            return jsonify({"message": "삭제된 계정입니다."}), 409
+       
+        changed_at = datetime.now(timezone('Asia/Seoul')).replace(microsecond=0)
+
+        new_log = UserStatusLog(user_id=input_user_id,
+                                changed_by=input_admin_id,
+                                previous_status=user.status,
+                                new_status=UserStatus.ACTIVE,
+                                changed_at=changed_at)
+        db.session.add(new_log)
+
+        user.status = UserStatus.ACTIVE
+
+        db.session.commit()
+        return jsonify({"message": "성공적으로 반영되었습니다."}), 201
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"message": e}), 500
 
 
 @bp.route('/user/promote', methods=["POST"])
@@ -952,3 +1054,33 @@ def create_comment():
         print('야야야야야에러뜸: :', e)
         db.session.rollback()
         return jsonify({"message":e}), 404
+
+
+# 유저 Status 변경 이력을 불러옵니다.
+@bp.route('/log/status/<id>', methods=['GET'])
+@jwt_required()
+def get_status_log(id):
+    try:
+        logs = UserStatusLog.query.order_by(desc(UserStatusLog.changed_at)).filter_by(user_id=id).all()
+
+        return jsonify([log.to_dict() for log in logs]), 200
+
+    except Exception as e:
+        db.session.rollback()
+        print(e)
+        return jsonify({"message": e}), 404
+
+
+# 유저 Role 변경 이력을 불러옵니다.
+@bp.route('/log/role/<id>', methods=['GET'])
+@jwt_required()
+def get_role_log(id):
+    try:
+        logs = UserRoleLog.query.order_by(desc(UserRoleLog.changed_at)).filter_by(user_id=id).all()
+
+        return jsonify([log.to_dict() for log in logs]), 200
+
+    except Exception as e:
+        db.session.rollback()
+        print(e)
+        return jsonify({"message": e}), 404
